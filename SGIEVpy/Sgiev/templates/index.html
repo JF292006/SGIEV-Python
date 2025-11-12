@@ -1,0 +1,63 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" integrity="sha384-xOolHFLEh07PJGoPkLv1IbcEPTNtaed2xpHsD9ESMhqIYd0nLMwNLD69Npy4HI+N" crossorigin="anonymous">
+    <link href="https://unpkg.com/ionicons@4.5.10-0/dist/css/ionicons.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300;1,300&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/styleindex.css' %}">
+    <title>Romar Natural</title>
+
+</head>
+<body>
+
+   
+    <nav class="navbar">
+        <div class="logo">
+            <img src="{% static 'img/logo.png' %}" alt="Romar Natural Logo">
+            <h1>Romar Natural</h1>
+        </div>
+        <div class="nav-buttons">
+            <a href="{% url 'login'%}" class="login-btn">Iniciar Sesión</a>
+        </div>
+    </nav>
+
+   
+    <section class="catalogo">
+        <div class="card">
+            <div class="image-box">
+                <img src="{% static 'img/macacos.jpg' %}" alt="Producto 1">
+            </div>
+            <div class="content">
+                <h2>Macaquinhos</h2>
+                <p>Macacos.</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="image-box">
+                <img src="" alt="Producto 2">
+            </div>
+            <div class="content">
+                <h2>Producto 2</h2>
+                <p>Otro producto natural con beneficios únicos.</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="image-box">
+                <img src="" alt="Producto 3">
+            </div>
+            <div class="content">
+                <h2>Producto 3</h2>
+                <p>Ideal para tu bienestar y salud.</p>
+            </div>
+        </div>
+    </section>
+
+</body>
+</html>

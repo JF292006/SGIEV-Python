@@ -1,0 +1,157 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - SGIEVpy</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root{
+            --primary: #3d862e;
+            --light: #ffffff;
+            --grey: #efefef;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Mulish', sans-serif;
+            background-color: var(--grey);
+        }
+
+        .navbar {
+            background-color: var(--light);
+            padding: 15px 40px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar h1 {
+            color: var(--primary);
+            font-size: 1.5rem;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .role-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .badge-admin {
+            background-color: #ff6b6b;
+            color: white;
+        }
+
+        .badge-operario {
+            background-color: #ffd93d;
+            color: #333;
+        }
+
+        .logout-btn {
+            background-color: var(--primary);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background-color: #2d6621;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .welcome-card {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .welcome-card h2 {
+            color: var(--primary);
+            font-size: 2rem;
+            margin-bottom: 15px;
+        }
+
+        .welcome-card p {
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .alert {
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <h1>SGIEVpy</h1>
+        <div class="user-info">
+            <span>{{ usuario.p_nombre }} {{ usuario.p_apellido }}</span>
+            <span class="role-badge {% if es_admin %}badge-admin{% else %}badge-operario{% endif %}">
+                {{ usuario.tipo_usu|title }}
+            </span>
+            <a href="{% url 'logout' %}" class="logout-btn">Cerrar Sesión</a>
+        </div>
+    </nav>
+
+    <!-- Content -->
+    <div class="container">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="welcome-card">
+            <h2>¡Bienvenido al Dashboard!</h2>
+            <p>Has iniciado sesión correctamente como <strong>{{ usuario.tipo_usu }}</strong></p>
+            
+            {% if es_admin %}
+                <p style="margin-top: 20px; color: var(--primary);">
+                    ✓ Tienes permisos de <strong>Administrador</strong> - Acceso completo al sistema
+                </p>
+            {% else %}
+                <p style="margin-top: 20px; color: var(--primary);">
+                    ✓ Tienes permisos de <strong>Operario</strong> - Acceso a funciones operativas
+                </p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

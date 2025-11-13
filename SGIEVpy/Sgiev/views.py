@@ -1,6 +1,12 @@
 from django.shortcuts import render, redirect
 from datetime import datetime
+<<<<<<< HEAD
 from .models import Categoria
+=======
+from . models import Categoria, Producto
+
+#VISTAS PRINCIPALES
+>>>>>>> 439dd376718210027940a1548ccc13373c421e9d
 
 # VISTAS PRINCIPALES
 from django.contrib.auth import authenticate, logout
@@ -88,6 +94,163 @@ def eliminar_categoria(request, id):
     categoria.delete()
     return redirect('list_categoria')
 
+#PRODUCTOS
+
+def list_producto(request):
+    producto = Producto.objects.select_related('categoria_idcategoria', 'proveedor_idproveedor').all()
+    data = {'producto': producto}
+    return render(request, 'producto/index.html', data)
+
+
+def registro_producto(request):
+    if request.method == "POST":
+        
+        nombre = request.POST.get('nombre_producto')
+        descripcion = request.POST.get('descripcion_producto')
+        codigo = request.POST.get('codigo_barras')
+        registro_sanitario = request.POST.get('registrosaniario')
+        precio_compra = request.POST.get('precio_compra') or "0"
+        precio_venta = request.POST.get('precio_venta') or "0"
+        margen = request.POST.get('margen_ganancia') or "0"
+        stock_actual = request.POST.get('stock_actual') or "0"
+        stock_min = request.POST.get('stock_minimo') or "0"
+        stock_max = request.POST.get('stock_maximo') or "0"
+        fecha_ven = request.POST.get('fecha_vencimiento')
+        fecha_cre = datetime.now()
+        categoria_id = request.POST.get('categoria_idcategoria')
+        proveedor_id = request.POST.get('proveedor_idproveedor')
+        activo = request.POST.get('activo') or 1
+
+        
+        try:
+            precio_compra = Decimal(precio_compra)
+        except InvalidOperation:
+            precio_compra = Decimal('0.00')
+        try:
+            precio_venta = Decimal(precio_venta)
+        except InvalidOperation:
+            precio_venta = Decimal('0.00')
+        try:
+            margen = Decimal(margen)
+        except InvalidOperation:
+            margen = Decimal('0.00')
+
+        try:
+            stock_actual = int(stock_actual)
+        except:
+            stock_actual = 0
+        try:
+            stock_min = int(stock_min)
+        except:
+            stock_min = 0
+        try:
+            stock_max = int(stock_max)
+        except:
+            stock_max = 0
+
+       
+        categoria = get_object_or_404(Categoria, id=categoria_id)
+        proveedor = get_object_or_404(Proveedor, id=proveedor_id)
+
+        producto = Producto(
+            nombre_producto = nombre,
+            descripcion_producto = descripcion,
+            codigo_barras = codigo,
+            registrosaniario = registro_sanitario,
+            precio_compra = precio_compra,
+            precio_venta = precio_venta,
+            margen_ganancia = margen,
+            stock_actual = stock_actual,
+            stock_minimo = stock_min,
+            stock_maximo = stock_max,
+            fecha_vencimiento = fecha_ven,
+            categoria_idcategoria = categoria,
+            proveedor_idproveedor = proveedor,
+            activo = activo
+        )
+        producto.save()
+        return redirect('list_producto')
+
+  
+    categorias = Categoria.objects.filter(activo=1)
+    proveedores = Proveedor.objects.filter(activo=1)
+    data = {'categorias': categorias, 'proveedores': proveedores}
+    return render(request, 'producto/nuevoprod.html', data)
+
+
+
+def pre_editar_producto(request, id):
+    producto = get_object_or_404(Producto, id=id)
+    categorias = Categoria.objects.filter(activo=1)
+    proveedores = Proveedor.objects.filter(activo=1)
+    data = {
+        'producto': producto,
+        'categorias': categorias,
+        'proveedores': proveedores
+    }
+    return render(request, 'producto/editarprod.html', data)
+
+
+
+def editar_producto(request, id):
+    if request.method == "POST":
+        producto = get_object_or_404(Producto, id=id)
+
+        producto.nombre_producto = request.POST.get('nombre_producto')
+        producto.descripcion_producto = request.POST.get('descripcion_producto')
+        producto.codigo_barras = request.POST.get('codigo_barras')
+        producto.registrosaniario = request.POST.get('registrosaniario')
+
+        
+        from decimal import Decimal, InvalidOperation
+        try:
+            producto.precio_compra = Decimal(request.POST.get('precio_compra') or '0')
+        except InvalidOperation:
+            producto.precio_compra = Decimal('0.00')
+        try:
+            producto.precio_venta = Decimal(request.POST.get('precio_venta') or '0')
+        except InvalidOperation:
+            producto.precio_venta = Decimal('0.00')
+        try:
+            producto.margen_ganancia = Decimal(request.POST.get('margen_ganancia') or '0')
+        except InvalidOperation:
+            producto.margen_ganancia = Decimal('0.00')
+
+        try:
+            producto.stock_actual = int(request.POST.get('stock_actual') or 0)
+        except:
+            producto.stock_actual = 0
+        try:
+            producto.stock_minimo = int(request.POST.get('stock_minimo') or 0)
+        except:
+            producto.stock_minimo = 0
+        try:
+            producto.stock_maximo = int(request.POST.get('stock_maximo') or 0)
+        except:
+            producto.stock_maximo = 0
+
+        producto.fecha_vencimiento = request.POST.get('fecha_vencimiento')
+
+        
+        categoria_id = request.POST.get('categoria_idcategoria')
+        proveedor_id = request.POST.get('proveedor_idproveedor')
+        producto.categoria_idcategoria = get_object_or_404(Categoria, id=categoria_id)
+        producto.proveedor_idproveedor = get_object_or_404(Proveedor, id=proveedor_id)
+
+        producto.activo = request.POST.get('activo') or producto.activo
+
+        producto.save()
+
+    return redirect('list_producto')
+
+
+def eliminar_producto(request, id):
+    producto = get_object_or_404(Producto, id=id)
+    producto.delete()
+    return redirect('list_producto')
+
+
+#LOGIN - AUTENTICACIÓN 
 
 def login_view(request):
     """

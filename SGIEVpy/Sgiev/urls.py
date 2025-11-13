@@ -2,8 +2,8 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('', views.index, name='index'),
-    path('index', views.index, name='index'),
+    path('', views.index_view, name='index'),
+    path('index', views.index_view, name='index'),
     path('login', views.login, name='login'),
     path('admin', views.admin, name='admin'),
 
@@ -14,6 +14,12 @@ urlpatterns = [
     path('editar_categoria/<str:id>', views.editar_categoria, name='editar_categoria'),
     path('eliminar_categoria/<str:id>', views.eliminar_categoria, name='eliminar_categoria'),
     
+    #PRODUCTO
+     path('list_producto/', views.list_producto, name='list_producto'),
+    path('registro_producto/', views.registro_producto, name='registro_producto'),
+    path('pre_editar_producto/<str:id>', views.pre_editar_producto, name="pre_editar_producto"),
+    path('editar_producto/<str:id>', views.editar_producto, name='editar_producto'),
+    path('eliminar_producto/<str:id>', views.eliminar_producto, name='eliminar_producto'),
 
     # Index / Landing Page
     path('', views.index, name='index'),

@@ -1,20 +1,24 @@
 from django.shortcuts import render, redirect, get_object_or_404
-
 from datetime import datetime
-from . models import Categoria, Producto
-from .models import Proveedor
-
-#VISTAS PRINCIPALES
-
+from . models import Categoria, Producto, Proveedor
 from django.contrib.auth import authenticate, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from .forms import LoginForm
+from .forms import LoginForm, UsuarioForm
 from .models import Usuarios
+from .decorators import admin_required
+from django.core.paginator import Paginator
+from django.db import models
+from decimal import InvalidOperation, Decimal
 
 
 
-def index_view(request):
+# Imports de tus modelos y forms
+from .models import Categoria, Usuarios
+from .forms import LoginForm, UsuarioForm
+from .decorators import admin_required
+
+def index(request):  
     """
     Vista principal - Landing page
     """
@@ -23,64 +27,72 @@ def index_view(request):
     
     return render(request, 'index.html')
 
+
 def login(request):
     return render(request, 'login.html')
+
 
 def admin(request):
     return render(request, 'admin.html')
 
 
-#CATEGORIA
+# CATEGORIA
 
 def inicio_cat(request):
-    return render (request, 'categoria/index.html')
+    return render(request, 'categoria/index.html')
+
 
 def list_categoria(request):
     categoria = Categoria.objects.all()
-    data={'categoria':categoria}
-    return render (request, 'categoria/index.html', data)
+    data = {'categoria': categoria}
+    return render(request, 'categoria/index.html', data)
+
 
 def registro_categoria(request):
-    if request.method=="POST":
+    if request.method == "POST":
         nombre = request.POST.get('nombreCat')
         descripcion = request.POST.get('descCat')
         fecha = datetime.now()
         estado = 1
 
-        categoria=Categoria(nombre_categoria=nombre,
-                            descripcion_categoria=descripcion, 
-                            fecha_creacion=fecha,
-                            activo=estado)
+        categoria = Categoria(
+            nombre_categoria=nombre,
+            descripcion_categoria=descripcion,
+            fecha_creacion=fecha,
+            activo=estado
+        )
         
         categoria.save()
         return redirect('list_categoria')
     return render(request, 'categoria/nuevocat.html')
 
+
 def pre_editar_categoria(request, id):
-    categoria=Categoria.objects.get(id=id)
-    data={
-        'categoria':categoria
+    categoria = Categoria.objects.get(id=id)
+    data = {
+        'categoria': categoria
     }
     return render(request, 'categoria/editarcat.html', data)
 
+
 def editar_categoria(request, id):
-    if request.method=="POST":
-        categoria=Categoria.objects.get(id=id)
+    if request.method == "POST":
+        categoria = Categoria.objects.get(id=id)
 
         nombre = request.POST.get('nombreCat')
         descripcion = request.POST.get('descCat')
         estado = request.POST.get('estadoCat')
 
-        categoria.nombre_categoria=nombre
-        categoria.descripcion_categoria=descripcion
-        categoria.activo=estado
+        categoria.nombre_categoria = nombre
+        categoria.descripcion_categoria = descripcion
+        categoria.activo = estado
 
         categoria.save()
     return redirect("categoria/index")
 
 
 def eliminar_categoria(request, id):
-    categoria=Categoria.objects.get(id=id)
+    categoria = Categoria.objects.get(id=id)
     categoria.delete()
     return redirect('list_categoria')
 
@@ -98,7 +110,7 @@ def registro_producto(request):
         nombre = request.POST.get('nombre_producto')
         descripcion = request.POST.get('descripcion_producto')
         codigo = request.POST.get('codigo_barras')
-        registro_sanitario = request.POST.get('registrosaniario')
+        registro_sanitario = request.POST.get('registrosanitario')
         precio_compra = request.POST.get('precio_compra') or "0"
         precio_venta = request.POST.get('precio_venta') or "0"
         margen = request.POST.get('margen_ganancia') or "0"
@@ -189,7 +201,7 @@ def editar_producto(request, id):
         producto.nombre_producto = request.POST.get('nombre_producto')
         producto.descripcion_producto = request.POST.get('descripcion_producto')
         producto.codigo_barras = request.POST.get('codigo_barras')
-        producto.registrosaniario = request.POST.get('registrosaniario')
+        producto.registrosaniario = request.POST.get('registrosanitario')
 
         
         from decimal import Decimal, InvalidOperation
@@ -238,6 +250,60 @@ def eliminar_producto(request, id):
     producto = get_object_or_404(Producto, id=id)
     producto.delete()
     return redirect('list_producto')
+
+#PROVEEDOR
+
+def listar_proveedores(request):
+    proveedores = Proveedor.objects.all()
+    return render(request, 'proveedor/listar_prov.html', {'proveedores': proveedores})
+
+def registrar_proveedor(request):
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre_proveedor')
+        correo = request.POST.get('correo_proveedor')
+        telefono = request.POST.get('telefono')
+        direccion = request.POST.get('direccion')
+        nit = request.POST.get('nit')
+        contacto_nombre = request.POST.get('contacto_nombre')
+        contacto_telefono = request.POST.get('contacto_telefono')
+        activo = request.POST.get('activo')
+
+        proveedor = Proveedor(
+            nombre_proveedor=nombre,
+            correo_proveedor=correo,
+            telefono=telefono,
+            direccion=direccion,
+            nit=nit,
+            contacto_nombre=contacto_nombre,
+            contacto_telefono=contacto_telefono,
+            activo=1 if activo == 'on' else 0
+        )
+        proveedor.save()
+
+        return redirect('listar_proveedores')  # Redirige al listado al terminar
+    return render(request, 'proveedor/registrarprov.html')
+
+def editar_proveedor(request, id):
+    proveedor = get_object_or_404(Proveedor, id=id)
+
+    if request.method == 'POST':
+        proveedor.nombre_proveedor = request.POST['nombre_proveedor']
+        proveedor.correo_proveedor = request.POST['correo_proveedor']
+        proveedor.telefono = request.POST['telefono']
+        proveedor.direccion = request.POST['direccion']
+        proveedor.nit = request.POST['nit']
+        proveedor.contacto_nombre = request.POST['contacto_nombre']
+        proveedor.contacto_telefono = request.POST['contacto_telefono']
+        proveedor.activo = 1 if request.POST.get('activo') == 'True' else 0
+        proveedor.save()
+        return redirect('listar_proveedores')
+
+    return render(request, 'proveedor/editar_proveedor.html', {'proveedor': proveedor})
+
+def eliminar_proveedor(request, id):
+    proveedor = get_object_or_404(Proveedor, id=id)
+    proveedor.delete()
+    return redirect('listar_proveedores')
 
 
 #LOGIN - AUTENTICACIÓN 
@@ -298,58 +364,121 @@ def dashboard_view(request):
     }
     return render(request, 'dashboard.html', context)
 
-   
-#PROVEEDOR
 
-def registrar_proveedor(request):
+# ===== VISTAS DE USUARIOS (CRUD) =====
+
+@admin_required
+def usuarios_listar(request):
+    """
+    Lista todos los usuarios con paginación y búsqueda
+    """
+    # Obtener parámetro de búsqueda
+    search = request.GET.get('search', '')
+    
+    # Filtrar usuarios
+    if search:
+        usuarios = Usuarios.objects.filter(
+            models.Q(p_nombre__icontains=search) |
+            models.Q(p_apellido__icontains=search) |
+            models.Q(correo__icontains=search) |
+            models.Q(num_identificacion__icontains=search)
+        ).order_by('-fecha_registro')
+    else:
+        usuarios = Usuarios.objects.all().order_by('-fecha_registro')
+    
+    # Paginación
+    paginator = Paginator(usuarios, 10)  # 10 usuarios por página
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'search': search,
+        'usuario': request.user
+    }
+    
+    return render(request, 'usuarios/listar.html', context)
+
+
+@admin_required
+def usuarios_crear(request):
+    """
+    Crear un nuevo usuario
+    """
     if request.method == 'POST':
-        nombre = request.POST.get('nombre_proveedor')
-        correo = request.POST.get('correo_proveedor')
-        telefono = request.POST.get('telefono')
-        direccion = request.POST.get('direccion')
-        nit = request.POST.get('nit')
-        contacto_nombre = request.POST.get('contacto_nombre')
-        contacto_telefono = request.POST.get('contacto_telefono')
-        activo = request.POST.get('activo')
+        form = UsuarioForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Usuario creado exitosamente')
+            return redirect('usuarios_listar')
+    else:
+        form = UsuarioForm()
+    
+    context = {
+        'form': form,
+        'titulo': 'Crear Usuario',
+        'usuario': request.user
+    }
+    
+    return render(request, 'usuarios/crear.html', context)
 
-        proveedor = Proveedor(
-            nombre_proveedor=nombre,
-            correo_proveedor=correo,
-            telefono=telefono,
-            direccion=direccion,
-            nit=nit,
-            contacto_nombre=contacto_nombre,
-            contacto_telefono=contacto_telefono,
-            activo=1 if activo == 'on' else 0
-        )
-        proveedor.save()
 
-        return redirect('listar_proveedores')  # Redirige al listado al terminar
-    return render(request, 'proveedor/registrarprov.html')
-
-def listar_proveedores(request):
-    proveedores = Proveedor.objects.all()
-    return render(request, 'proveedor/listar_prov.html', {'proveedores': proveedores})
-
-def editar_proveedor(request, id):
-    proveedor = get_object_or_404(Proveedor, id=id)
-
+@admin_required
+def usuarios_editar(request, id):
+    """
+    Editar un usuario existente
+    """
+    usuario = get_object_or_404(Usuarios, pk=id)
+    
     if request.method == 'POST':
-        proveedor.nombre_proveedor = request.POST['nombre_proveedor']
-        proveedor.correo_proveedor = request.POST['correo_proveedor']
-        proveedor.telefono = request.POST['telefono']
-        proveedor.direccion = request.POST['direccion']
-        proveedor.nit = request.POST['nit']
-        proveedor.contacto_nombre = request.POST['contacto_nombre']
-        proveedor.contacto_telefono = request.POST['contacto_telefono']
-        proveedor.activo = 1 if request.POST.get('activo') == 'True' else 0
-        proveedor.save()
-        return redirect('listar_proveedores')
+        form = UsuarioForm(request.POST, instance=usuario)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Usuario actualizado exitosamente')
+            return redirect('usuarios_listar')
+    else:
+        form = UsuarioForm(instance=usuario)
+    
+    context = {
+        'form': form,
+        'titulo': 'Editar Usuario',
+        'usuario': request.user,
+        'usuario_editando': usuario
+    }
+    
+    return render(request, 'usuarios/editar.html', context)
 
-    return render(request, 'proveedor/editar_proveedor.html', {'proveedor': proveedor})
 
-def eliminar_proveedor(request, id):
-    proveedor = get_object_or_404(Proveedor, id=id)
-    proveedor.delete()
-    return redirect('listar_proveedores')
+@admin_required
+def usuarios_eliminar(request, id):
+    """
+    Eliminar (desactivar) un usuario
+    """
+    usuario = get_object_or_404(Usuarios, pk=id)
+    
+    # No permitir eliminar al usuario actual
+    if usuario.id == request.user.id:
+        messages.error(request, 'No puedes eliminar tu propio usuario')
+        return redirect('usuarios_listar')
+    
+    # Desactivar en lugar de eliminar
+    usuario.activo = 0
+    usuario.save()
+    
+    messages.success(request, f'Usuario {usuario.nombre_completo} desactivado exitosamente')
+    return redirect('usuarios_listar')
 
+
+@admin_required
+def usuarios_detalle(request, id):
+    """
+    Ver detalles de un usuario
+    """
+    usuario_detalle = get_object_or_404(Usuarios, pk=id)
+    
+    context = {
+        'usuario_detalle': usuario_detalle,
+        'usuario': request.user
+    }
+    
+    return render(request, 'usuarios/detalle.html', context)

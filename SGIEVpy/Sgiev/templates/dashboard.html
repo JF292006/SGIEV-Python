@@ -1,157 +1,387 @@
 {% load static %}
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - SGIEVpy</title>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" integrity="sha384-xOolHFLEh07PJGoPkLv1IbcEPTNtaed2xpHsD9ESMhqIYd0nLMwNLD69Npy4HI+N" crossorigin="anonymous">
+    <link href="https://unpkg.com/ionicons@4.5.10-0/dist/css/ionicons.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300;0,400;0,600;0,700;1,300&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+
+    <title>Panel administrador - {{ usuario.p_nombre }}</title>
     
     <style>
-        :root{
-            --primary: #3d862e;
-            --light: #ffffff;
-            --grey: #efefef;
+        /* Estilos adicionales para responsive */
+        @media (max-width: 768px) {
+            #sidebar-container {
+                position: fixed;
+                left: -100%;
+                transition: left 0.3s ease;
+                z-index: 1000;
+                height: 100vh;
+            }
+            
+            #sidebar-container.active {
+                left: 0;
+            }
+            
+            .menu-toggle {
+                display: block !important;
+                position: fixed;
+                top: 15px;
+                left: 15px;
+                z-index: 999;
+                background: var(--primary, #3d862e);
+                color: white;
+                border: none;
+                padding: 10px 15px;
+                border-radius: 5px;
+                cursor: pointer;
+            }
+            
+            #content {
+                padding-left: 0 !important;
+            }
+            
+            .navbar .form-inline {
+                display: none;
+            }
+            
+            .navbar .dropdown {
+                margin-left: auto;
+            }
         }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        
+        .menu-toggle {
+            display: none;
         }
-
-        body {
-            font-family: 'Mulish', sans-serif;
-            background-color: var(--grey);
-        }
-
-        .navbar {
-            background-color: var(--light);
-            padding: 15px 40px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .navbar h1 {
-            color: var(--primary);
-            font-size: 1.5rem;
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
+        
+        /* Badge para rol */
         .role-badge {
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
+            font-size: 0.75rem;
+            padding: 3px 10px;
+            border-radius: 12px;
+            margin-left: 5px;
         }
-
+        
         .badge-admin {
-            background-color: #ff6b6b;
+            background-color: #dc3545;
             color: white;
         }
-
+        
         .badge-operario {
-            background-color: #ffd93d;
+            background-color: #ffc107;
             color: #333;
-        }
-
-        .logout-btn {
-            background-color: var(--primary);
-            color: white;
-            padding: 8px 20px;
-            border-radius: 20px;
-            text-decoration: none;
-            font-weight: 600;
-            transition: background 0.3s ease;
-        }
-
-        .logout-btn:hover {
-            background-color: #2d6621;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 40px auto;
-            padding: 0 20px;
-        }
-
-        .welcome-card {
-            background: white;
-            padding: 40px;
-            border-radius: 15px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-
-        .welcome-card h2 {
-            color: var(--primary);
-            font-size: 2rem;
-            margin-bottom: 15px;
-        }
-
-        .welcome-card p {
-            color: #666;
-            font-size: 1.1rem;
-        }
-
-        .alert {
-            padding: 15px 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-
-        .alert-success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
         }
     </style>
 </head>
 <body>
-    <!-- Navbar -->
-    <nav class="navbar">
-        <h1>SGIEVpy</h1>
-        <div class="user-info">
-            <span>{{ usuario.p_nombre }} {{ usuario.p_apellido }}</span>
-            <span class="role-badge {% if es_admin %}badge-admin{% else %}badge-operario{% endif %}">
-                {{ usuario.tipo_usu|title }}
-            </span>
-            <a href="{% url 'logout' %}" class="logout-btn">Cerrar Sesión</a>
-        </div>
-    </nav>
+    <!-- Botón hamburguesa para móvil -->
+    <button class="menu-toggle" onclick="toggleSidebar()">
+        <i class="icon ion-md-menu"></i>
+    </button>
 
-    <!-- Content -->
-    <div class="container">
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{{ message.tags }}">
-                    {{ message }}
-                </div>
-            {% endfor %}
-        {% endif %}
-
-        <div class="welcome-card">
-            <h2>¡Bienvenido al Dashboard!</h2>
-            <p>Has iniciado sesión correctamente como <strong>{{ usuario.tipo_usu }}</strong></p>
+    <div class="d-flex">
+        <div id="sidebar-container" class="bg-primary">
+            <div class="logo">
+                <h4 class="text-light font-weight-bold">Romar Natural</h4>
+            </div>
             
-            {% if es_admin %}
-                <p style="margin-top: 20px; color: var(--primary);">
-                    ✓ Tienes permisos de <strong>Administrador</strong> - Acceso completo al sistema
-                </p>
-            {% else %}
-                <p style="margin-top: 20px; color: var(--primary);">
-                    ✓ Tienes permisos de <strong>Operario</strong> - Acceso a funciones operativas
-                </p>
-            {% endif %}
+            <div class="menu">
+                <a href="{% url 'dashboard' %}" class="d-block text-light p-3">
+                    <i class="icon ion-md-apps mr-2"></i>Panel
+                </a>
+                <a href="{% url 'usuarios_listar' %}" class="d-block text-light p-3">
+    <i class="icon ion-md-contacts mr-2 lead"></i>Usuarios
+</a>
+
+                <a href="{% url 'listar_proveedores' %}" class="d-block text-light p-3">
+                    <i class="icon ion-md-cube mr-2 lead"></i>Proveedores
+                </a>
+                <a href="#" class="d-block text-light p-3">
+                    <i class="icon ion-md-cart mr-2 lead"></i>Ventas
+                </a>
+                
+                <a href="{% url 'list_categoria' %}" class="d-block text-light p-3">
+                    <i class="icon ion-md-copy mr-2 lead"></i>Categoria
+                </a>
+                <a href="{% url 'list_producto' %}" class="d-block text-light p-3">
+                    <i class="icon ion-md-folder mr-2 lead"></i>Inventario
+                </a>
+            </div>
+        </div>
+
+        <div class="w-100">
+            <nav class="navbar navbar-expand-lg navbar-light bg-light">
+                <div class="container-fluid">
+                    <form class="form-inline my-2 my-lg-0 ml-0 d-flex align-items-center">
+                        <input class="form-control mr-2" type="search" placeholder="Buscar" aria-label="Buscar">
+                        <button class="btn btn-outline-success my-2 my-sm-0" type="submit">
+                            <i class="icon ion-md-search"></i>
+                        </button>
+                    </form>
+
+                    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent"
+                        aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+
+                    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                        <ul class="navbar-nav ml-auto">
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" role="button" data-toggle="dropdown" aria-expanded="false">
+                                    {{ usuario.p_nombre }} {{ usuario.p_apellido }}
+                                    <span class="role-badge {% if es_admin %}badge-admin{% else %}badge-operario{% endif %}">
+                                        {{ usuario.tipo_usu|title }}
+                                    </span>
+                                </a>
+                                <div class="dropdown-menu dropdown-menu-right">
+                                    <a class="dropdown-item" href="#">
+                                        <i class="icon ion-md-person mr-2"></i>Mi perfil
+                                    </a>
+                                    <div class="dropdown-divider"></div>
+                                    <a class="dropdown-item" href="{% url 'logout' %}">
+                                        <i class="icon ion-md-log-out mr-2"></i>Cerrar Sesión
+                                    </a>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </nav>
+
+            <div id="content">
+                <!-- Mensajes de Django -->
+                {% if messages %}
+                    <div class="container mt-3">
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <section class="py-3">
+                    <div class="container">
+                        <div class="row">
+                            <div class="col-lg-9">
+                                <h1 class="font-weight-bold mb-0">
+                                    Bienvenido {{ usuario.p_nombre }} {{ usuario.p_apellido }}
+                                </h1>
+                                <p class="lead text-muted">
+                                    {% if es_admin %}
+                                        Panel de Administrador - Acceso completo al sistema
+                                    {% else %}
+                                        Panel de Operario - Gestión de operaciones diarias
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="bg-mix">
+                    <div class="container">
+                        <div class="card rounded-0">
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-lg-3 col-md-6 d-flex stat my-3">
+                                        <div class="mx-auto">
+                                            <h6 class="text-muted">Ingresos mensuales</h6>
+                                            <h3 class="font-weight-bold">$30.000</h3>
+                                            <h6 class="text-success">
+                                                <i class="icon ion-md-arrow-dropup-circle"></i>50.5%
+                                            </h6>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-lg-3 col-md-6 d-flex stat my-3">
+                                        <div class="mx-auto">
+                                            <h6 class="text-muted">Ventas totales</h6>
+                                            <h3 class="font-weight-bold">$45.000</h3>
+                                            <h6 class="text-success">
+                                                <i class="icon ion-md-arrow-dropup-circle"></i>30.2%
+                                            </h6>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-lg-3 col-md-6 d-flex stat my-3">
+                                        <div class="mx-auto">
+                                            <h6 class="text-muted">Productos vendidos</h6>
+                                            <h3 class="font-weight-bold">1,250</h3>
+                                            <h6 class="text-success">
+                                                <i class="icon ion-md-arrow-dropup-circle"></i>15.8%
+                                            </h6>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-lg-3 col-md-6 d-flex my-3">
+                                        <div class="mx-auto">
+                                            <h6 class="text-muted">Clientes nuevos</h6>
+                                            <h3 class="font-weight-bold">85</h3>
+                                            <h6 class="text-success">
+                                                <i class="icon ion-md-arrow-dropup-circle"></i>20.5%
+                                            </h6>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="bg-grey">
+                    <div class="container">
+                        <div class="row">
+                            <div class="col-lg-8 my-3">
+                                <div class="card rounded-0">
+                                    <div class="card-header">
+                                        <h6 class="font-weight-bold mb-0">Estadísticas de ventas</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <canvas id="myChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-4 my-3">
+                                <div class="card rounded-0">
+                                    <div class="card-header bg-light">
+                                        <h6 class="font-weight-bold mb-0">Ventas recientes</h6>
+                                    </div>
+                                    <div class="card-body pt-2">
+                                        <div class="d-flex border-bottom py-2">
+                                            <div class="d-flex mr-3">
+                                                <h2 class="align-self-center mb-0">
+                                                    <i class="icon ion-md-pricetag"></i>
+                                                </h2>
+                                            </div>
+                                            <div class="align-self-center">
+                                                <h6 class="d-inline-block mb-0">$250.000</h6>
+                                                <span class="badge badge-success ml-2">10% descuento</span>
+                                                <small class="d-block text-muted">Té verde</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex border-bottom py-2">
+                                            <div class="d-flex mr-3">
+                                                <h2 class="align-self-center mb-0">
+                                                    <i class="icon ion-md-pricetag"></i>
+                                                </h2>
+                                            </div>
+                                            <div class="align-self-center">
+                                                <h6 class="d-inline-block mb-0">$180.000</h6>
+                                                <span class="badge badge-success ml-2">5% descuento</span>
+                                                <small class="d-block text-muted">Manzanilla</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex border-bottom py-2">
+                                            <div class="d-flex mr-3">
+                                                <h2 class="align-self-center mb-0">
+                                                    <i class="icon ion-md-pricetag"></i>
+                                                </h2>
+                                            </div>
+                                            <div class="align-self-center">
+                                                <h6 class="d-inline-block mb-0">$320.000</h6>
+                                                <span class="badge badge-success ml-2">15% descuento</span>
+                                                <small class="d-block text-muted">Pack promocional</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex border-bottom py-2">
+                                            <div class="d-flex mr-3">
+                                                <h2 class="align-self-center mb-0">
+                                                    <i class="icon ion-md-pricetag"></i>
+                                                </h2>
+                                            </div>
+                                            <div class="align-self-center">
+                                                <h6 class="d-inline-block mb-0">$150.000</h6>
+                                                <span class="badge badge-success ml-2">8% descuento</span>
+                                                <small class="d-block text-muted">Hierbas medicinales</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex border-bottom py-2 mb-3">
+                                            <div class="d-flex mr-3">
+                                                <h2 class="align-self-center mb-0">
+                                                    <i class="icon ion-md-pricetag"></i>
+                                                </h2>
+                                            </div>
+                                            <div class="align-self-center">
+                                                <h6 class="d-inline-block mb-0">$200.000</h6>
+                                                <span class="badge badge-success ml-2">12% descuento</span>
+                                                <small class="d-block text-muted">Aceites esenciales</small>
+                                            </div>
+                                        </div>
+                                        <button class="btn btn-success w-100">Ver todas</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
         </div>
     </div>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js" integrity="sha384-+sLIOodYLS7CIrQpBjl+C7nPvqq+FbNUBDunl/OZv93DB7Ln/533i8e/mZXLi/P+" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    
+    <script>
+        // Gráfico
+        var ctx = document.getElementById('myChart').getContext('2d');
+        var chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Enero', 'Febrero', 'Marzo', 'Abril'],
+                datasets: [{
+                    label: 'Ventas mensuales',
+                    backgroundColor: [
+                        '#3d862e',
+                        '#3d862e',
+                        '#3d862e',
+                        '#3d862e'
+                    ],
+                    maxBarThickness: 30,
+                    borderColor: 'rgb(255, 99, 132)',
+                    data: [50, 100, 150, 200]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true
+            }
+        });
+
+        // Toggle sidebar en móvil
+        function toggleSidebar() {
+            document.getElementById('sidebar-container').classList.toggle('active');
+        }
+
+        // Cerrar sidebar al hacer click fuera de él en móvil
+        document.addEventListener('click', function(event) {
+            var sidebar = document.getElementById('sidebar-container');
+            var toggleBtn = document.querySelector('.menu-toggle');
+            
+            if (window.innerWidth <= 768) {
+                if (!sidebar.contains(event.target) && !toggleBtn.contains(event.target)) {
+                    sidebar.classList.remove('active');
+                }
+            }
+        });
+    </script>
 </body>
 </html>

@@ -1,0 +1,42 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Categoria</title>
+    <link rel="stylesheet" href="{% static 'css/styleform.css' %}">
+</head>
+<body>
+
+    <div class="form-container">
+        <h2>Modificar Categoria</h2>
+
+        <form action="{% url 'editar_categoria' categoria.id %}" method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="nombreCat">Nombre</label>
+                <input type="text" id="nombreCat" name="nombreCat" required value="{{categoria.nombre_categoria}}">
+            </div>
+
+            <div class="form-group">
+                <label for="descCat">Descripción</label>
+                <input type="text" id="descCat" name="descCat" rows="2" required value="{{categoria.descripcion_categoria}}">
+            </div>
+
+            <div class="form-group">
+                <label for="estadoCat">Estado</label>
+                <select id="estadoCat" name="estadoCat" >
+                    <option value="{{categoria.activo}}">Seleccione una opción</option>
+                    <option value="1">Activo</option>
+                    <option value="2">Inactivo</option>
+                </select>
+            </div>
+
+            <input type="submit" value="Actualizar" class="btn-submit"></input>
+            <a  href="{% url 'list_categoria' %}" class="btn-submit">Cancelar</a>
+        </form>
+    </div>
+
+</body>
+</html>

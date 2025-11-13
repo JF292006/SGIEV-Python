@@ -1,0 +1,34 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agregar Categoria</title>
+    <link rel="stylesheet" href="{% static 'css/styleform.css' %}">
+</head>
+<body>
+
+    <div class="form-container">
+        <h2>Registro de Categoria</h2>
+
+        <form action="{% url 'registro_categoria' %}" method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="nombreCat">Nombre</label>
+                <input type="text" id="nombreCat" name="nombreCat" required>
+            </div>
+
+            <div class="form-group">
+                <label for="descCat">Descripción</label>
+                <input type="text" id="descCat" name="descCat" rows="2" required>
+            </div>
+
+
+
+            <input type="submit" value="Registrar" class="btn-submit"></input>
+        </form>
+    </div>
+
+</body>
+</html>

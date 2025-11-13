@@ -1,3 +1,4 @@
+{% load static %}
 <!doctype html>
 <html lang="es">
 <head>
@@ -9,7 +10,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
   <link href="https://unpkg.com/ionicons@4.5.10-0/dist/css/ionicons.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300;1,300&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
 </head>
 
 <body>
@@ -54,13 +55,13 @@
 
      <div id="content" class="p-4">
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2 class="font-weight-bold text-success">Gestión de Usuarios</h2>
+    <h2 class="font-weight-bold text-success">Gestión de Inventario</h2>
 
     
     <div class="d-flex">
-      <button class="btn btn-success mr-2">
-        <i class="icon ion-md-add"></i> Nuevo Usuario
-      </button>
+      <a class="btn btn-success mr-2" href="{% url 'registro_producto' %}">
+        <i class="icon ion-md-add"></i> Nuevo Producto
+      </a>
       <button class="btn btn-info">
         <i class="icon ion-md-document"></i> Generar Reporte
       </button>
@@ -73,41 +74,55 @@
             <tr>
               <th>ID</th>
               <th>Nombre</th>
-              <th>Correo</th>
-              <th>Rol</th>
+              <th>Descripción</th>
+              <th>Código de Barras</th>
+              <th>Registro Sanitario</th>
+              <th>Prec. Compra</th>
+              <th>Prec. Venta</th>
+              <th>Margen</th>
+              <th>Stock</th>
+              <th>Stock Min</th>
+              <th>Stock Max</th>
+              <th>Fecha Ven</th>
+              <th>Fecha Cre</th>
+              <th>Categoria</th>
+              <th>Proveedor</th>
+              <th>Estado</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>1</td>
-              <td>Juan Pérez</td>
-              <td>juan@example.com</td>
-              <td>Administrador</td>
-              <td>
-                <button class="btn btn-warning btn-sm mr-2">
-                  <i class="icon ion-md-create"></i> Editar
-                </button>
-                <button class="btn btn-danger btn-sm">
-                  <i class="icon ion-md-trash"></i> Eliminar
-                </button>
-              </td>
-            </tr>
-            <tr>
-              <td>2</td>
-              <td>María López</td>
-              <td>maria@example.com</td>
-              <td>Operario</td>
-              <td>
-                <button class="btn btn-warning btn-sm mr-2">
-                  <i class="icon ion-md-create"></i> Editar
-                </button>
-                <button class="btn btn-danger btn-sm">
-                  <i class="icon ion-md-trash"></i> Eliminar
-                </button>
-              </td>
-            </tr>
-          </tbody>
+  {% for producto in productos %}
+  <tr>
+    <td>{{ producto.id }}</td>
+    <td>{{ producto.nombre_producto }}</td>
+    <td>{{ producto.descripcion_producto }}</td>
+    <td>{{ producto.codigo_barras }}</td>
+    <td>{{ producto.registrosaniario }}</td>
+    <td>{{ producto.precio_compra }}</td>
+    <td>{{ producto.precio_venta }}</td>
+    <td>{{ producto.margen_ganancia }}</td>
+    <td>{{ producto.stock_actual }}</td>
+    <td>{{ producto.stock_minimo }}</td>
+    <td>{{ producto.stock_maximo }}</td>
+    <td>{{ producto.fecha_vencimiento }}</td>
+    <td>{{ producto.fecha_creacion }}</td>
+    <td>{{ producto.categoria_idcategoria.nombre_categoria }}</td>
+    <td>{{ producto.proveedor_idproveedor.nombre_proveedor }}</td>
+    <td>{% if producto.activo == 1 %}Activo{% else %}Inactivo{% endif %}</td>
+    <td>
+      <a href="{% url 'pre_editar_producto' producto.id %}" class="btn btn-warning btn-sm mr-2">
+        <i class="icon ion-md-create"></i> Editar
+      </a>
+      <a href="{% url 'eliminar_producto' producto.id %}" class="btn btn-danger btn-sm"
+         onclick="return confirm('¿Seguro que deseas eliminar este producto?');">
+        <i class="icon ion-md-trash"></i> Eliminar
+      </a>
+    </td>
+  </tr>
+  {% endfor %}
+</tbody>
+
         </table>
       </div>
     </div>

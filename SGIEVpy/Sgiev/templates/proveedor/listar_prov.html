@@ -81,6 +81,7 @@
               <th>Contacto</th>
               <th>Tel. Contacto</th>
               <th>Activo</th>
+              <th class="text-center">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -95,6 +96,15 @@
               <td>{{ p.contacto_nombre }}</td>
               <td>{{ p.contacto_telefono }}</td>
               <td>{% if p.activo %}Sí{% else %}No{% endif %}</td>
+              <td class="text-center">
+                <a href="{% url 'editar_proveedor' p.id %}" class="btn btn-sm btn-warning mr-1">
+                  <i class="icon ion-md-create"></i> Editar
+                </a>
+                <a href="{% url 'eliminar_proveedor' p.id %}" class="btn btn-sm btn-danger"
+                   onclick="return confirm('¿Seguro que deseas eliminar este proveedor?');">
+                  <i class="icon ion-md-trash"></i> Eliminar
+                </a>
+              </td>
             </tr>
             {% endfor %}
           </tbody>

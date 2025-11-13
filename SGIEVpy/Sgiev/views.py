@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 
 from datetime import datetime
 from . models import Categoria, Producto
@@ -330,4 +330,26 @@ def registrar_proveedor(request):
 def listar_proveedores(request):
     proveedores = Proveedor.objects.all()
     return render(request, 'proveedor/listar_prov.html', {'proveedores': proveedores})
+
+def editar_proveedor(request, id):
+    proveedor = get_object_or_404(Proveedor, id=id)
+
+    if request.method == 'POST':
+        proveedor.nombre_proveedor = request.POST['nombre_proveedor']
+        proveedor.correo_proveedor = request.POST['correo_proveedor']
+        proveedor.telefono = request.POST['telefono']
+        proveedor.direccion = request.POST['direccion']
+        proveedor.nit = request.POST['nit']
+        proveedor.contacto_nombre = request.POST['contacto_nombre']
+        proveedor.contacto_telefono = request.POST['contacto_telefono']
+        proveedor.activo = 1 if request.POST.get('activo') == 'True' else 0
+        proveedor.save()
+        return redirect('listar_proveedores')
+
+    return render(request, 'proveedor/editar_proveedor.html', {'proveedor': proveedor})
+
+def eliminar_proveedor(request, id):
+    proveedor = get_object_or_404(Proveedor, id=id)
+    proveedor.delete()
+    return redirect('listar_proveedores')
 

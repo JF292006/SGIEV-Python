@@ -16,7 +16,7 @@ urlpatterns = [
     
 
     # Index / Landing Page
-    path('', views.index_view, name='index'),
+    path('', views.index, name='index'),
     
     # Autenticación
     path('login/', views.login_view, name='login'),

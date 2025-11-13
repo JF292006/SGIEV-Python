@@ -27,7 +27,7 @@ class Mensajeria(models.Model):
 class Usuarios(models.Model):
     num_identificacion = models.BigIntegerField()
     tipo_usu = models.CharField(max_length=20)
-    clave = models.CharField(max_length=10)
+    clave = models.CharField(max_length=128)
     p_nombre = models.CharField(max_length=15)
     s_nombre = models.CharField(max_length=15)
     p_apellido = models.CharField(max_length=15)
@@ -39,6 +39,29 @@ class Usuarios(models.Model):
     direccion = models.CharField(max_length=100)
     fecha_registro = models.DateTimeField(auto_now_add=True)
     activo = models.SmallIntegerField()
+
+    # Propiedades necesarias para compatibilidad con Django auth
+    @property
+    def is_authenticated(self):
+        """
+        Siempre retorna True para usuarios autenticados
+        """
+        return True
+    
+    @property
+    def is_anonymous(self):
+        """
+        Siempre retorna False para usuarios autenticados
+        """
+        return False
+    
+    @property
+    def nombre_completo(self):
+        """
+        Retorna el nombre completo del usuario
+        """
+        return f"{self.p_nombre} {self.p_apellido}"
+
 
 class Producto(models.Model):
     nombre_producto = models.CharField(max_length=100)

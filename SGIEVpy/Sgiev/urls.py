@@ -30,5 +30,9 @@ urlpatterns = [
     
     # Dashboard
     path('dashboard/', views.dashboard_view, name='dashboard'),
+    
+    #PROVEEDOR
+    path('proveedores/', views.listar_proveedores, name='listar_proveedores'),
+    path('proveedores/registrar/', views.registrar_proveedor, name='registrar_proveedor'),
 ]
 

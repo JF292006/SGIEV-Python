@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect
 
 from datetime import datetime
 from . models import Categoria, Producto
+from .models import Proveedor
 
 #VISTAS PRINCIPALES
 
@@ -296,4 +297,37 @@ def dashboard_view(request):
         'es_operario': request.user.tipo_usu == 'operario'
     }
     return render(request, 'dashboard.html', context)
+
+   
+#PROVEEDOR
+
+def registrar_proveedor(request):
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre_proveedor')
+        correo = request.POST.get('correo_proveedor')
+        telefono = request.POST.get('telefono')
+        direccion = request.POST.get('direccion')
+        nit = request.POST.get('nit')
+        contacto_nombre = request.POST.get('contacto_nombre')
+        contacto_telefono = request.POST.get('contacto_telefono')
+        activo = request.POST.get('activo')
+
+        proveedor = Proveedor(
+            nombre_proveedor=nombre,
+            correo_proveedor=correo,
+            telefono=telefono,
+            direccion=direccion,
+            nit=nit,
+            contacto_nombre=contacto_nombre,
+            contacto_telefono=contacto_telefono,
+            activo=1 if activo == 'on' else 0
+        )
+        proveedor.save()
+
+        return redirect('listar_proveedores')  # Redirige al listado al terminar
+    return render(request, 'proveedor/registrarprov.html')
+
+def listar_proveedores(request):
+    proveedores = Proveedor.objects.all()
+    return render(request, 'proveedor/listar_prov.html', {'proveedores': proveedores})
 

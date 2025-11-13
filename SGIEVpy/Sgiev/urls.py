@@ -21,6 +21,12 @@ urlpatterns = [
     path('editar_producto/<str:id>', views.editar_producto, name='editar_producto'),
     path('eliminar_producto/<str:id>', views.eliminar_producto, name='eliminar_producto'),
 
+    #PROVEEDOR
+    path('listar_proveedores/', views.listar_proveedores, name='listar_proveedores'),
+    path('proveedores/registrar/', views.registrar_proveedor, name='registrar_proveedor'),
+    path('proveedores/editar/<int:id>/', views.editar_proveedor, name='editar_proveedor'),
+    path('proveedores/eliminar/<int:id>/', views.eliminar_proveedor, name='eliminar_proveedor'),
+
     # Index / Landing Page
     path('', views.index, name='index'),
     

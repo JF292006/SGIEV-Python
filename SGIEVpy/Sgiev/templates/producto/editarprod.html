@@ -17,62 +17,62 @@
 
             <div class="form-group">
                 <label>Nombre</label>
-                <input type="text" name="nombreProd" value="{{ producto.nombre_producto }}" required>
+                <input type="text" name="nombre_producto" value="{{ producto.nombre_producto }}" required>
             </div>
 
             <div class="form-group">
                 <label>Descripción</label>
-                <input type="text" name="descProd" value="{{ producto.descripcion_producto }}" required>
+                <input type="text" name="descripcion_producto" value="{{ producto.descripcion_producto }}" required>
             </div>
 
             <div class="form-group">
                 <label>Código de Barras</label>
-                <input type="text" name="codProd" value="{{ producto.codigo_barras }}" required>
+                <input type="text" name="codigo_barras" value="{{ producto.codigo_barras }}" required>
             </div>
 
             <div class="form-group">
                 <label>Registro Sanitario</label>
-                <input type="text" name="regProd" value="{{ producto.registrosaniario }}" required>
+                <input type="text" name="registrosanitario" value="{{ producto.registrosaniario }}" required>
             </div>
 
             <div class="form-group">
                 <label>Precio Compra</label>
-                <input type="number" step="0.01" name="precioCompra" value="{{ producto.precio_compra }}" required>
+                <input type="number" step="0.01" name="precio_compra" value="{{ producto.precio_compra }}" required>
             </div>
 
             <div class="form-group">
                 <label>Precio Venta</label>
-                <input type="number" step="0.01" name="precioVenta" value="{{ producto.precio_venta }}" required>
+                <input type="number" step="0.01" name="precio_venta" value="{{ producto.precio_venta }}" required>
             </div>
 
             <div class="form-group">
                 <label>Margen Ganancia</label>
-                <input type="number" step="0.01" name="margenProd" value="{{ producto.margen_ganancia }}" required>
+                <input type="number" step="0.01" name="margen_ganancia" value="{{ producto.margen_ganancia }}" required>
             </div>
 
             <div class="form-group">
                 <label>Stock Actual</label>
-                <input type="number" name="stockAct" value="{{ producto.stock_actual }}" required>
+                <input type="number" name="stock_actual" value="{{ producto.stock_actual }}" required>
             </div>
 
             <div class="form-group">
                 <label>Stock Mínimo</label>
-                <input type="number" name="stockMin" value="{{ producto.stock_minimo }}" required>
+                <input type="number" name="stock_minimo" value="{{ producto.stock_minimo }}" required>
             </div>
 
             <div class="form-group">
                 <label>Stock Máximo</label>
-                <input type="number" name="stockMax" value="{{ producto.stock_maximo }}" required>
+                <input type="number" name="stock_maximo" value="{{ producto.stock_maximo }}" required>
             </div>
 
             <div class="form-group">
                 <label>Fecha Vencimiento</label>
-                <input type="date" name="fechaVen" value="{{ producto.fecha_vencimiento|date:'Y-m-d' }}" required>
+                <input type="date" name="fecha_vencimiento" value="{{ producto.fecha_vencimiento|date:'Y-m-d' }}" required>
             </div>
 
             <div class="form-group">
                 <label>Categoría</label>
-                <select name="categoria" required>
+                <select name="categoria_idcategoria" required>
                     {% for c in categorias %}
                     <option value="{{ c.id }}" {% if c.id == producto.categoria_idcategoria.id %}selected{% endif %}>{{ c.nombre_categoria }}</option>
                     {% endfor %}
@@ -81,7 +81,7 @@
 
             <div class="form-group">
                 <label>Proveedor</label>
-                <select name="proveedor" required>
+                <select name="proveedor_idproveedor" required>
                     {% for p in proveedores %}
                     <option value="{{ p.id }}" {% if p.id == producto.proveedor_idproveedor.id %}selected{% endif %}>{{ p.nombre_proveedor }}</option>
                     {% endfor %}
@@ -90,7 +90,7 @@
 
             <div class="form-group">
                 <label>Estado</label>
-                <select name="estadoProd">
+                <select name="activo">
                     <option value="1" {% if producto.activo == 1 %}selected{% endif %}>Activo</option>
                     <option value="0" {% if producto.activo == 0 %}selected{% endif %}>Inactivo</option>
                 </select>

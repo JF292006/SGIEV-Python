@@ -1,6 +1,10 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from datetime import datetime
+<<<<<<< HEAD
 from . models import Categoria, Producto
+=======
+from . models import Categoria, Producto, Proveedor
+>>>>>>> ac9d10f2fae7ad85ce289ac5c235962f5a755eb1
 from django.contrib.auth import authenticate, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -9,6 +13,10 @@ from .models import Usuarios
 from .decorators import admin_required
 from django.core.paginator import Paginator
 from django.db import models
+<<<<<<< HEAD
+=======
+from decimal import InvalidOperation, Decimal
+>>>>>>> ac9d10f2fae7ad85ce289ac5c235962f5a755eb1
 
 
 # Imports de tus modelos y forms
@@ -16,6 +24,14 @@ from .models import Categoria, Usuarios
 from .forms import LoginForm, UsuarioForm
 from .decorators import admin_required
 
+<<<<<<< HEAD
+=======
+# Imports de tus modelos y forms
+from .models import Categoria, Usuarios
+from .forms import LoginForm, UsuarioForm
+from .decorators import admin_required
+
+>>>>>>> ac9d10f2fae7ad85ce289ac5c235962f5a755eb1
 def index(request):  
     """
     Vista principal - Landing page
@@ -108,7 +124,7 @@ def registro_producto(request):
         nombre = request.POST.get('nombre_producto')
         descripcion = request.POST.get('descripcion_producto')
         codigo = request.POST.get('codigo_barras')
-        registro_sanitario = request.POST.get('registrosaniario')
+        registro_sanitario = request.POST.get('registrosanitario')
         precio_compra = request.POST.get('precio_compra') or "0"
         precio_venta = request.POST.get('precio_venta') or "0"
         margen = request.POST.get('margen_ganancia') or "0"
@@ -199,7 +215,7 @@ def editar_producto(request, id):
         producto.nombre_producto = request.POST.get('nombre_producto')
         producto.descripcion_producto = request.POST.get('descripcion_producto')
         producto.codigo_barras = request.POST.get('codigo_barras')
-        producto.registrosaniario = request.POST.get('registrosaniario')
+        producto.registrosaniario = request.POST.get('registrosanitario')
 
         
         from decimal import Decimal, InvalidOperation
@@ -248,6 +264,60 @@ def eliminar_producto(request, id):
     producto = get_object_or_404(Producto, id=id)
     producto.delete()
     return redirect('list_producto')
+
+#PROVEEDOR
+
+def listar_proveedores(request):
+    proveedores = Proveedor.objects.all()
+    return render(request, 'proveedor/listar_prov.html', {'proveedores': proveedores})
+
+def registrar_proveedor(request):
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre_proveedor')
+        correo = request.POST.get('correo_proveedor')
+        telefono = request.POST.get('telefono')
+        direccion = request.POST.get('direccion')
+        nit = request.POST.get('nit')
+        contacto_nombre = request.POST.get('contacto_nombre')
+        contacto_telefono = request.POST.get('contacto_telefono')
+        activo = request.POST.get('activo')
+
+        proveedor = Proveedor(
+            nombre_proveedor=nombre,
+            correo_proveedor=correo,
+            telefono=telefono,
+            direccion=direccion,
+            nit=nit,
+            contacto_nombre=contacto_nombre,
+            contacto_telefono=contacto_telefono,
+            activo=1 if activo == 'on' else 0
+        )
+        proveedor.save()
+
+        return redirect('listar_proveedores')  # Redirige al listado al terminar
+    return render(request, 'proveedor/registrarprov.html')
+
+def editar_proveedor(request, id):
+    proveedor = get_object_or_404(Proveedor, id=id)
+
+    if request.method == 'POST':
+        proveedor.nombre_proveedor = request.POST['nombre_proveedor']
+        proveedor.correo_proveedor = request.POST['correo_proveedor']
+        proveedor.telefono = request.POST['telefono']
+        proveedor.direccion = request.POST['direccion']
+        proveedor.nit = request.POST['nit']
+        proveedor.contacto_nombre = request.POST['contacto_nombre']
+        proveedor.contacto_telefono = request.POST['contacto_telefono']
+        proveedor.activo = 1 if request.POST.get('activo') == 'True' else 0
+        proveedor.save()
+        return redirect('listar_proveedores')
+
+    return render(request, 'proveedor/editar_proveedor.html', {'proveedor': proveedor})
+
+def eliminar_proveedor(request, id):
+    proveedor = get_object_or_404(Proveedor, id=id)
+    proveedor.delete()
+    return redirect('listar_proveedores')
 
 
 #LOGIN - AUTENTICACIÓN 

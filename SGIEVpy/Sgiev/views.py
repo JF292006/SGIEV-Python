@@ -1,20 +1,20 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from datetime import datetime
-<<<<<<< HEAD
-from .models import Categoria
-=======
 from . models import Categoria, Producto
-
-#VISTAS PRINCIPALES
->>>>>>> 439dd376718210027940a1548ccc13373c421e9d
-
-# VISTAS PRINCIPALES
 from django.contrib.auth import authenticate, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from .forms import LoginForm
+from .forms import LoginForm, UsuarioForm
 from .models import Usuarios
+from .decorators import admin_required
+from django.core.paginator import Paginator
+from django.db import models
 
+
+# Imports de tus modelos y forms
+from .models import Categoria, Usuarios
+from .forms import LoginForm, UsuarioForm
+from .decorators import admin_required
 
 def index(request):  
     """
@@ -307,3 +307,122 @@ def dashboard_view(request):
         'es_operario': request.user.tipo_usu == 'operario'
     }
     return render(request, 'dashboard.html', context)
+
+
+# ===== VISTAS DE USUARIOS (CRUD) =====
+
+@admin_required
+def usuarios_listar(request):
+    """
+    Lista todos los usuarios con paginación y búsqueda
+    """
+    # Obtener parámetro de búsqueda
+    search = request.GET.get('search', '')
+    
+    # Filtrar usuarios
+    if search:
+        usuarios = Usuarios.objects.filter(
+            models.Q(p_nombre__icontains=search) |
+            models.Q(p_apellido__icontains=search) |
+            models.Q(correo__icontains=search) |
+            models.Q(num_identificacion__icontains=search)
+        ).order_by('-fecha_registro')
+    else:
+        usuarios = Usuarios.objects.all().order_by('-fecha_registro')
+    
+    # Paginación
+    paginator = Paginator(usuarios, 10)  # 10 usuarios por página
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'search': search,
+        'usuario': request.user
+    }
+    
+    return render(request, 'usuarios/listar.html', context)
+
+
+@admin_required
+def usuarios_crear(request):
+    """
+    Crear un nuevo usuario
+    """
+    if request.method == 'POST':
+        form = UsuarioForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Usuario creado exitosamente')
+            return redirect('usuarios_listar')
+    else:
+        form = UsuarioForm()
+    
+    context = {
+        'form': form,
+        'titulo': 'Crear Usuario',
+        'usuario': request.user
+    }
+    
+    return render(request, 'usuarios/crear.html', context)
+
+
+@admin_required
+def usuarios_editar(request, id):
+    """
+    Editar un usuario existente
+    """
+    usuario = get_object_or_404(Usuarios, pk=id)
+    
+    if request.method == 'POST':
+        form = UsuarioForm(request.POST, instance=usuario)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Usuario actualizado exitosamente')
+            return redirect('usuarios_listar')
+    else:
+        form = UsuarioForm(instance=usuario)
+    
+    context = {
+        'form': form,
+        'titulo': 'Editar Usuario',
+        'usuario': request.user,
+        'usuario_editando': usuario
+    }
+    
+    return render(request, 'usuarios/editar.html', context)
+
+
+@admin_required
+def usuarios_eliminar(request, id):
+    """
+    Eliminar (desactivar) un usuario
+    """
+    usuario = get_object_or_404(Usuarios, pk=id)
+    
+    # No permitir eliminar al usuario actual
+    if usuario.id == request.user.id:
+        messages.error(request, 'No puedes eliminar tu propio usuario')
+        return redirect('usuarios_listar')
+    
+    # Desactivar en lugar de eliminar
+    usuario.activo = 0
+    usuario.save()
+    
+    messages.success(request, f'Usuario {usuario.nombre_completo} desactivado exitosamente')
+    return redirect('usuarios_listar')
+
+
+@admin_required
+def usuarios_detalle(request, id):
+    """
+    Ver detalles de un usuario
+    """
+    usuario_detalle = get_object_or_404(Usuarios, pk=id)
+    
+    context = {
+        'usuario_detalle': usuario_detalle,
+        'usuario': request.user
+    }
+    
+    return render(request, 'usuarios/detalle.html', context)

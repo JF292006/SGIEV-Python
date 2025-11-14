@@ -1,9 +1,181 @@
 from django import forms
 from django.contrib.auth.hashers import make_password, check_password
-from .models import Usuarios, Venta, Producto, Venta_has_producto
+from .models import Usuarios, Venta, Producto, Venta_has_producto, Envio, Mensajeria
 from decimal import Decimal
 
+# ===== FORMULARIOS DE MENSAJERÍA =====
 
+class MensajeriaForm(forms.ModelForm):
+    """
+    Formulario para gestionar empresas de mensajería
+    """
+    class Meta:
+        model = Mensajeria
+        fields = ['nombre_mensajeria', 'tel_mensajeria', 'direccion_mensajeria', 'cobertura', 'activo']
+        
+        widgets = {
+            'nombre_mensajeria': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Nombre de la empresa',
+                'required': 'required'
+            }),
+            'tel_mensajeria': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Teléfono de contacto',
+                'required': 'required'
+            }),
+            'direccion_mensajeria': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Dirección de la empresa',
+                'required': 'required'
+            }),
+            'cobertura': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ej: Nacional, Bogotá, Regional',
+                'required': 'required'
+            }),
+            'activo': forms.Select(attrs={
+                'class': 'form-control',
+                'required': 'required'
+            }, choices=[(1, 'Activo'), (0, 'Inactivo')])
+        }
+        
+        labels = {
+            'nombre_mensajeria': 'Nombre de la Empresa',
+            'tel_mensajeria': 'Teléfono',
+            'direccion_mensajeria': 'Dirección',
+            'cobertura': 'Cobertura',
+            'activo': 'Estado'
+        }
+
+
+# ===== FORMULARIOS DE ENVÍOS =====
+
+class EnvioForm(forms.ModelForm):
+    """
+    Formulario para registrar envíos
+    """
+    ESTADOS_ENVIO = [
+        ('pendiente', 'Pendiente'),
+        ('en_transito', 'En Tránsito'),
+        ('entregado', 'Entregado'),
+        ('devuelto', 'Devuelto')
+    ]
+    
+    estado_envio = forms.ChoiceField(
+        choices=ESTADOS_ENVIO,
+        widget=forms.Select(attrs={'class': 'form-control', 'required': 'required'}),
+        label='Estado del Envío'
+    )
+    
+    class Meta:
+        model = Envio
+        fields = [
+            'venta_idfactura',
+            'fk_mensajeria',
+            'estado_envio',
+            'fecha_envio',
+            'fecha_entrega',
+            'direccion_salida',
+            'direccion_envio',
+            'observaciones',
+            'novedades'
+        ]
+        
+        widgets = {
+            'venta_idfactura': forms.Select(attrs={
+                'class': 'form-control select2',  # Agregamos clase select2
+                'required': 'required'
+            }),
+            'fk_mensajeria': forms.Select(attrs={
+                'class': 'form-control select2',  # Agregamos clase select2
+                'required': 'required'
+            }),
+            'fecha_envio': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date',
+                'required': 'required'
+            }),
+            'fecha_entrega': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date',
+                'required': 'required'
+            }),
+            'direccion_salida': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Dirección de origen',
+                'required': 'required'
+            }),
+            'direccion_envio': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Dirección de destino',
+                'required': 'required'
+            }),
+            'observaciones': forms.Textarea(attrs={
+                'class': 'form-control',
+                'placeholder': 'Observaciones adicionales',
+                'rows': 3
+            }),
+            'novedades': forms.Textarea(attrs={
+                'class': 'form-control',
+                'placeholder': 'Novedades del envío',
+                'rows': 3
+            })
+        }
+        
+        labels = {
+            'venta_idfactura': 'Factura de Venta',
+            'fk_mensajeria': 'Empresa de Mensajería',
+            'fecha_envio': 'Fecha de Envío',
+            'fecha_entrega': 'Fecha de Entrega Estimada',
+            'direccion_salida': 'Dirección de Salida',
+            'direccion_envio': 'Dirección de Envío',
+            'observaciones': 'Observaciones',
+            'novedades': 'Novedades'
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Si estamos editando, permitir la venta actual
+        if self.instance and self.instance.pk:
+            # Al editar, mostrar todas las ventas (incluyendo la actual)
+            ventas_disponibles = Venta.objects.all().order_by('-fecha_factura')
+        else:
+            # Al crear, solo mostrar ventas SIN envío asociado
+            ventas_con_envio = Envio.objects.values_list('venta_idfactura', flat=True)
+            ventas_disponibles = Venta.objects.exclude(id__in=ventas_con_envio).order_by('-fecha_factura')
+        
+        self.fields['venta_idfactura'].queryset = ventas_disponibles
+        self.fields['fk_mensajeria'].queryset = Mensajeria.objects.filter(activo=1)
+        
+        # Personalizar display
+        self.fields['venta_idfactura'].label_from_instance = lambda obj: f"{obj.numero_factura} - ${obj.valor_total:,.0f} - {obj.usuarios_id_usuario.nombre_completo}"
+        self.fields['fk_mensajeria'].label_from_instance = lambda obj: f"{obj.nombre_mensajeria} - {obj.cobertura}"
+    
+    def clean_venta_idfactura(self):
+        """
+        Valida que la venta no tenga ya un envío asociado (excepto al editar)
+        """
+        venta = self.cleaned_data.get('venta_idfactura')
+        
+        # Si estamos editando, permitir la venta actual
+        if self.instance and self.instance.pk:
+            # Verificar si hay otro envío (que no sea este) con la misma venta
+            envio_existente = Envio.objects.filter(venta_idfactura=venta).exclude(pk=self.instance.pk).exists()
+        else:
+            # Al crear, verificar si ya existe un envío con esa venta
+            envio_existente = Envio.objects.filter(venta_idfactura=venta).exists()
+        
+        if envio_existente:
+            raise forms.ValidationError(
+                f'La venta {venta.numero_factura} ya tiene un envío asociado. '
+                'Cada venta solo puede tener un envío.'
+            )
+        
+        return venta
+
+#form de las ventas 
 class EditarEstadoVentaForm(forms.ModelForm):
     """
     Formulario para que admin edite solo el estado de pago de una venta

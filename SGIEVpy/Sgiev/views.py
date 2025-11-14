@@ -14,10 +14,13 @@ from .models import (
     Producto, 
     Venta, 
     Venta_has_producto, 
-    Movimiento_inventario
+    Movimiento_inventario,
+    Envio, 
+    Mensajeria
 )
-from .forms import LoginForm, UsuarioForm, VentaForm, AgregarProductoForm,EditarEstadoVentaForm
+from .forms import LoginForm, UsuarioForm, VentaForm, AgregarProductoForm,EditarEstadoVentaForm,EnvioForm, MensajeriaForm
 from .decorators import admin_required
+
 
 
 def index(request):  
@@ -996,3 +999,222 @@ def ventas_eliminar(request, id):
         messages.error(request, f'Error al eliminar la venta: {str(e)}')
     
     return redirect('ventas_listar')
+
+# ===== VISTAS DE MENSAJERÍA (SOLO ADMIN) =====
+
+@admin_required
+def mensajeria_listar(request):
+    """
+    Lista todas las empresas de mensajería (solo admin)
+    """
+    search = request.GET.get('search', '')
+    
+    if search:
+        mensajerias = Mensajeria.objects.filter(
+            models.Q(nombre_mensajeria__icontains=search) |
+            models.Q(cobertura__icontains=search)
+        ).order_by('nombre_mensajeria')
+    else:
+        mensajerias = Mensajeria.objects.all().order_by('nombre_mensajeria')
+    
+    paginator = Paginator(mensajerias, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'search': search,
+        'usuario': request.user,
+        'es_admin': True
+    }
+    
+    return render(request, 'mensajeria/listar.html', context)
+
+
+@admin_required
+def mensajeria_crear(request):
+    """
+    Crear nueva empresa de mensajería (solo admin)
+    """
+    if request.method == 'POST':
+        form = MensajeriaForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Empresa de mensajería creada exitosamente')
+            return redirect('mensajeria_listar')
+    else:
+        form = MensajeriaForm()
+    
+    context = {
+        'form': form,
+        'titulo': 'Nueva Empresa de Mensajería',
+        'usuario': request.user,
+        'es_admin': True
+    }
+    
+    return render(request, 'mensajeria/crear.html', context)
+
+
+@admin_required
+def mensajeria_editar(request, id):
+    """
+    Editar empresa de mensajería (solo admin)
+    """
+    mensajeria = get_object_or_404(Mensajeria, pk=id)
+    
+    if request.method == 'POST':
+        form = MensajeriaForm(request.POST, instance=mensajeria)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Empresa de mensajería actualizada exitosamente')
+            return redirect('mensajeria_listar')
+    else:
+        form = MensajeriaForm(instance=mensajeria)
+    
+    context = {
+        'form': form,
+        'titulo': 'Editar Empresa de Mensajería',
+        'mensajeria': mensajeria,
+        'usuario': request.user,
+        'es_admin': True
+    }
+    
+    return render(request, 'mensajeria/editar.html', context)
+
+
+@admin_required
+def mensajeria_eliminar(request, id):
+    """
+    Eliminar empresa de mensajería (solo admin)
+    """
+    mensajeria = get_object_or_404(Mensajeria, pk=id)
+    nombre = mensajeria.nombre_mensajeria
+    mensajeria.delete()
+    
+    messages.success(request, f'Empresa {nombre} eliminada exitosamente')
+    return redirect('mensajeria_listar')
+
+
+# ===== VISTAS DE ENVÍOS =====
+
+@login_required(login_url='login')
+def envios_listar(request):
+    """
+    Lista todos los envíos
+    Admin: ve todos | Operario: ve los suyos
+    """
+    search = request.GET.get('search', '')
+    estado = request.GET.get('estado', '')
+    
+    # Filtrar según rol
+    if request.user.tipo_usu == 'administrador':
+        envios = Envio.objects.all().order_by('-fecha_envio')
+    else:
+        envios = Envio.objects.filter(usuarios_id_usuario=request.user).order_by('-fecha_envio')
+    
+    # Aplicar filtros
+    if search:
+        envios = envios.filter(
+            models.Q(venta_idfactura__numero_factura__icontains=search) |
+            models.Q(direccion_envio__icontains=search) |
+            models.Q(fk_mensajeria__nombre_mensajeria__icontains=search)
+        )
+    
+    if estado:
+        envios = envios.filter(estado_envio=estado)
+    
+    paginator = Paginator(envios, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'search': search,
+        'estado': estado,
+        'usuario': request.user,
+        'es_admin': request.user.tipo_usu == 'administrador'
+    }
+    
+    return render(request, 'envios/listar.html', context)
+
+
+@login_required(login_url='login')
+def envios_crear(request):
+    """
+    Crear nuevo envío
+    """
+    if request.method == 'POST':
+        form = EnvioForm(request.POST)
+        if form.is_valid():
+            envio = form.save(commit=False)
+            envio.usuarios_id_usuario = request.user
+            envio.save()
+            messages.success(request, f'Envío registrado exitosamente')
+            return redirect('envios_detalle', id=envio.id)
+    else:
+        form = EnvioForm()
+    
+    context = {
+        'form': form,
+        'titulo': 'Registrar Nuevo Envío',
+        'usuario': request.user,
+        'es_admin': request.user.tipo_usu == 'administrador'
+    }
+    
+    return render(request, 'envios/crear.html', context)
+
+
+@login_required(login_url='login')
+def envios_editar(request, id):
+    """
+    Editar envío existente
+    """
+    envio = get_object_or_404(Envio, pk=id)
+    
+    if request.method == 'POST':
+        form = EnvioForm(request.POST, instance=envio)  # ← instance=envio es crucial
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Envío actualizado exitosamente')
+            return redirect('envios_detalle', id=envio.id)
+    else:
+        form = EnvioForm(instance=envio)  # ← instance=envio autocompleta
+    
+    context = {
+        'form': form,
+        'titulo': 'Editar Envío',
+        'envio': envio,
+        'usuario': request.user,
+        'es_admin': request.user.tipo_usu == 'administrador'
+    }
+    
+    return render(request, 'envios/editar.html', context)
+
+
+@admin_required
+def envios_eliminar(request, id):
+    """
+    Eliminar envío (solo admin)
+    """
+    envio = get_object_or_404(Envio, pk=id)
+    factura = envio.venta_idfactura.numero_factura
+    envio.delete()
+    
+    messages.success(request, f'Envío de la factura {factura} eliminado exitosamente')
+    return redirect('envios_listar')
+
+
+@login_required(login_url='login')
+def envios_detalle(request, id):
+    """
+    Ver detalles de un envío
+    """
+    envio = get_object_or_404(Envio, pk=id)
+    
+    context = {
+        'envio': envio,
+        'usuario': request.user,
+        'es_admin': request.user.tipo_usu == 'administrador'
+    }
+    
+    return render(request, 'envios/detalle.html', context)

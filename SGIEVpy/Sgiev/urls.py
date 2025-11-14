@@ -56,6 +56,19 @@ urlpatterns = [
     # API para productos
     path('api/producto/<int:producto_id>/', views.obtener_precio_producto, name='obtener_precio_producto'),
 
+ #crud mensajeria
+    path('mensajeria/', views.mensajeria_listar, name='mensajeria_listar'),
+    path('mensajeria/crear/', views.mensajeria_crear, name='mensajeria_crear'),
+    path('mensajeria/editar/<int:id>/', views.mensajeria_editar, name='mensajeria_editar'),
+    path('mensajeria/eliminar/<int:id>/', views.mensajeria_eliminar, name='mensajeria_eliminar'),
+    
+    # CRUD Envíos
+    path('envios/', views.envios_listar, name='envios_listar'),
+    path('envios/crear/', views.envios_crear, name='envios_crear'),
+    path('envios/editar/<int:id>/', views.envios_editar, name='envios_editar'),
+    path('envios/eliminar/<int:id>/', views.envios_eliminar, name='envios_eliminar'),
+    path('envios/detalle/<int:id>/', views.envios_detalle, name='envios_detalle'),
+    
 
 ]
 

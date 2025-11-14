@@ -1,0 +1,70 @@
+{% extends 'ventas/base_ventas.html' %}
+
+{% block title %}Editar Estado - {{ venta.numero_factura }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="font-weight-bold">
+                <i class="icon ion-md-create"></i> Editar Estado de Venta
+            </h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb bg-transparent p-0">
+                    <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'ventas_listar' %}">Ventas</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'ventas_detalle' venta.id %}">{{ venta.numero_factura }}</a></li>
+                    <li class="breadcrumb-item active">Editar Estado</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6 offset-lg-3">
+            <div class="card">
+                <div class="card-header bg-warning text-white">
+                    <h5 class="mb-0"><i class="icon ion-md-document"></i> Cambiar Estado de Pago</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Información de la venta -->
+                    <div class="alert alert-info">
+                        <h6 class="mb-2"><strong>Factura:</strong> {{ venta.numero_factura }}</h6>
+                        <p class="mb-1"><strong>Fecha:</strong> {{ venta.fecha_factura|date:"d/m/Y H:i" }}</p>
+                        <p class="mb-1"><strong>Total:</strong> ${{ venta.valor_total|floatformat:0 }}</p>
+                        <p class="mb-0"><strong>Saldo Pendiente:</strong> ${{ venta.saldo_pendiente|floatformat:0 }}</p>
+                    </div>
+
+                    <!-- Formulario -->
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="form-group">
+                            <label>{{ form.estado_pago.label }}</label>
+                            {{ form.estado_pago }}
+                            {% if form.estado_pago.errors %}
+                                <div class="text-danger small">{{ form.estado_pago.errors }}</div>
+                            {% endif %}
+                            <small class="text-muted">Seleccione el nuevo estado de pago</small>
+                        </div>
+
+                        <hr>
+
+                        <div class="alert alert-warning">
+                            <i class="icon ion-md-warning"></i> <strong>Nota:</strong> Solo se puede modificar el estado de pago. Los demás datos de la venta no se pueden cambiar.
+                        </div>
+
+                        <button type="submit" class="btn btn-warning btn-block">
+                            <i class="icon ion-md-checkmark"></i> Actualizar Estado
+                        </button>
+                        <a href="{% url 'ventas_detalle' venta.id %}" class="btn btn-secondary btn-block">
+                            <i class="icon ion-md-arrow-back"></i> Cancelar
+                        </a>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

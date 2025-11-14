@@ -43,6 +43,22 @@ urlpatterns = [
     path('usuarios/editar/<int:id>/', views.usuarios_editar, name='usuarios_editar'),
     path('usuarios/eliminar/<int:id>/', views.usuarios_eliminar, name='usuarios_eliminar'),
     path('usuarios/detalle/<int:id>/', views.usuarios_detalle, name='usuarios_detalle'),
+    
+    # CRUD Ventas
+    path('ventas/', views.ventas_listar, name='ventas_listar'),
+    path('ventas/crear/', views.ventas_crear, name='ventas_crear'),
+    path('ventas/detalle/<int:id>/', views.ventas_detalle, name='ventas_detalle'),
+    path('ventas/quitar/<int:producto_id>/', views.ventas_quitar_producto, name='ventas_quitar_producto'),
+    path('ventas/limpiar/', views.ventas_limpiar_carrito, name='ventas_limpiar_carrito'),
+    path('ventas/editar-estado/<int:id>/', views.ventas_editar_estado, name='ventas_editar_estado'),
+    path('ventas/eliminar/<int:id>/', views.ventas_eliminar, name='ventas_eliminar'),
+    path('ventas/pdf/<int:id>/', views.ventas_generar_pdf, name='ventas_generar_pdf'),  
+    # API para productos
+    path('api/producto/<int:producto_id>/', views.obtener_precio_producto, name='obtener_precio_producto'),
+
 
 ]
+
+
+
 

@@ -1,6 +1,189 @@
 from django import forms
 from django.contrib.auth.hashers import make_password, check_password
-from .models import Usuarios
+from .models import Usuarios, Venta, Producto, Venta_has_producto
+from decimal import Decimal
+
+
+class EditarEstadoVentaForm(forms.ModelForm):
+    """
+    Formulario para que admin edite solo el estado de pago de una venta
+    """
+    class Meta:
+        model = Venta
+        fields = ['estado_pago']
+        
+        widgets = {
+            'estado_pago': forms.Select(attrs={
+                'class': 'form-control',
+                'required': 'required'
+            })
+        }
+        
+        labels = {
+            'estado_pago': 'Estado de Pago'
+        }
+
+class VentaForm(forms.ModelForm):
+    """
+    Formulario para registrar ventas
+    """
+    class Meta:
+        model = Venta
+        fields = [
+            'numero_factura',
+            'descuento',
+            'metodo_pago',
+            'estado_pago',
+            'abono',
+            'observaciones'
+        ]
+        
+        widgets = {
+            'numero_factura': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Número de factura (ej: FAC-001)',
+                'required': 'required'
+            }),
+            'descuento': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'placeholder': '0',
+                'value': '0',
+                'step': '0.01',
+                'min': '0'
+            }),
+            'metodo_pago': forms.Select(attrs={
+                'class': 'form-control',
+                'required': 'required'
+            }),
+            'estado_pago': forms.Select(attrs={
+                'class': 'form-control',
+                'required': 'required'
+            }),
+            'abono': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'placeholder': '0',
+                'value': '0',
+                'step': '0.01',
+                'min': '0'
+            }),
+            'observaciones': forms.Textarea(attrs={
+                'class': 'form-control',
+                'placeholder': 'Observaciones adicionales',
+                'rows': 3
+            })
+        }
+        
+        labels = {
+            'numero_factura': 'Número de Factura',
+            'descuento': 'Descuento ($)',
+            'metodo_pago': 'Método de Pago',
+            'estado_pago': 'Estado de Pago',
+            'abono': 'Abono Inicial ($)',
+            'observaciones': 'Observaciones'
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Generar número de factura automático si es nuevo
+        if not self.instance.pk:
+            ultima_venta = Venta.objects.all().order_by('-id').first()
+            if ultima_venta:
+                try:
+                    num = int(ultima_venta.numero_factura.split('-')[-1]) + 1
+                    self.fields['numero_factura'].initial = f'FAC-{num:05d}'
+                except:
+                    self.fields['numero_factura'].initial = 'FAC-00001'
+            else:
+                self.fields['numero_factura'].initial = 'FAC-00001'
+
+
+class AgregarProductoForm(forms.Form):
+    """
+    Formulario para agregar productos al carrito
+    """
+    producto = forms.ModelChoiceField(
+        queryset=Producto.objects.filter(activo=1, stock_actual__gt=0),
+        label='Producto',
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+            'required': 'required',
+            'id': 'id_producto'
+        })
+    )
+    
+    cantidad = forms.IntegerField(
+        label='Cantidad',
+        min_value=1,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'placeholder': '1',
+            'value': '1',
+            'min': '1',
+            'id': 'id_cantidad'
+        })
+    )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Personalizar el display del producto
+        self.fields['producto'].label_from_instance = lambda obj: f"{obj.nombre_producto} - Stock: {obj.stock_actual} - ${obj.precio_venta}"
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        producto = cleaned_data.get('producto')
+        cantidad = cleaned_data.get('cantidad')
+        
+        if producto and cantidad:
+            if cantidad > producto.stock_actual:
+                raise forms.ValidationError(
+                    f'Stock insuficiente. Disponible: {producto.stock_actual} unidades'
+                )
+        
+        return cleaned_data
+
+class AgregarProductoForm(forms.Form):
+    """
+    Formulario para agregar productos al carrito
+    """
+    producto = forms.ModelChoiceField(
+        queryset=Producto.objects.filter(activo=1, stock_actual__gt=0),
+        label='Producto',
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+            'required': 'required',
+            'id': 'id_producto'
+        })
+    )
+    
+    cantidad = forms.IntegerField(
+        label='Cantidad',
+        min_value=1,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'placeholder': '1',
+            'value': '1',
+            'min': '1',
+            'id': 'id_cantidad'
+        })
+    )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Personalizar el display del producto
+        self.fields['producto'].label_from_instance = lambda obj: f"{obj.nombre_producto} - Stock: {obj.stock_actual} - ${obj.precio_venta}"
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        producto = cleaned_data.get('producto')
+        cantidad = cleaned_data.get('cantidad')
+        
+        if producto and cantidad:
+            if cantidad > producto.stock_actual:
+                raise forms.ValidationError(
+                    f'Stock insuficiente. Disponible: {producto.stock_actual} unidades'
+                )
+        
+        return cleaned_data
 
 class LoginForm(forms.Form):
     correo = forms.EmailField(

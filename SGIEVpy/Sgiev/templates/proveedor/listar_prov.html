@@ -41,6 +41,15 @@
                 <a href="{% url 'list_producto' %}" class="d-block text-light p-3">
                     <i class="icon ion-md-folder mr-2 lead"></i>Inventario
                 </a>
+                 
+                 <a href="{% url 'envios_listar' %}" class="d-block text-light p-3">
+        <i class="icon ion-md-bicycle mr-2 lead"></i>Envíos
+        </a>
+        {% if usuario.tipo_usu == 'administrador' %}
+    <a href="{% url 'mensajeria_listar' %}" class="d-block text-light p-3">
+        <i class="icon ion-md-bus mr-2 lead"></i>Mensajería
+    </a>
+    {% endif %}
             </div>
     </div>
 
@@ -81,6 +90,44 @@
             <button class="btn btn-info">
               <i class="icon ion-md-document"></i> Generar Reporte
             </button>
+            
+<div class="input-group mr-1" style="width: 360px;">
+  <select id="prov_seleccion" class="form-control">
+    <option value="">Selecciona proveedor...</option>
+    {% for prov in proveedores %}
+      <option value="{{ prov.pk }}">{{ prov.nombre_proveedor }}</option>
+    {% endfor %}
+  </select>
+  <div class="input-group-append">
+ 
+    <button id="btn_compra" class="btn btn-sm btn-info" type="button" disabled
+            data-url-template="{% url 'crear_compra_proveedor' 0 %}">
+      <i class="icon ion-md-cart"></i> Compra
+    </button>
+  </div>
+</div>
+
+<script>
+  (function(){
+    const sel = document.getElementById('prov_seleccion');
+    const btn = document.getElementById('btn_compra');
+
+    sel.addEventListener('change', function(){
+      btn.disabled = !this.value;
+    });
+
+    btn.addEventListener('click', function(){
+      const id = sel.value;
+      if(!id) return;
+      const tmpl = this.getAttribute('data-url-template'); 
+
+      const target = tmpl.replace('/0/', '/' + id + '/');
+      window.location.href = target;
+    });
+  })();
+</script>
+
+
           </div>
         </div>
 
@@ -113,14 +160,24 @@
               <td>{{ p.contacto_telefono }}</td>
               <td>{% if p.activo %}Sí{% else %}No{% endif %}</td>
               <td class="text-center">
-                <a href="{% url 'editar_proveedor' p.id %}" class="btn btn-sm btn-warning mr-1">
-                  <i class="icon ion-md-create"></i> Editar
-                </a>
-                <a href="{% url 'eliminar_proveedor' p.id %}" class="btn btn-sm btn-danger"
-                   onclick="return confirm('¿Seguro que deseas eliminar este proveedor?');">
-                  <i class="icon ion-md-trash"></i> Eliminar
-                </a>
-              </td>
+  <a href="{% url 'editar_proveedor' p.id %}" class="btn btn-sm btn-warning mr-1">
+    <i class="icon ion-md-create"></i> Editar
+  </a>
+
+  {% if p.pk %}
+    <a href="{% url 'crear_compra_proveedor' p.pk %}" class="btn btn-sm btn-info mr-1">
+      <i class="icon ion-md-cart"></i> Compra
+    </a>
+  {% else %}
+    <button class="btn btn-sm btn-secondary mr-1" disabled title="Proveedor sin ID">Compra</button>
+  {% endif %}
+
+  <a href="{% url 'eliminar_proveedor' p.id %}" class="btn btn-sm btn-danger"
+     onclick="return confirm('¿Seguro que deseas eliminar este proveedor?');">
+    <i class="icon ion-md-trash"></i> Eliminar
+  </a>
+</td>
+
             </tr>
             {% endfor %}
           </tbody>

@@ -26,6 +26,8 @@ urlpatterns = [
     path('proveedores/registrar/', views.registrar_proveedor, name='registrar_proveedor'),
     path('proveedores/editar/<int:id>/', views.editar_proveedor, name='editar_proveedor'),
     path('proveedores/eliminar/<int:id>/', views.eliminar_proveedor, name='eliminar_proveedor'),
+    path('crear_compra_proveedor/<int:idproveedor>/', views.crear_compra_proveedor, name='crear_compra_proveedor'),
+
 
     # Index / Landing Page
     path('', views.index, name='index'),

@@ -41,6 +41,14 @@
                 <a href="{% url 'list_producto' %}" class="d-block text-light p-3">
                     <i class="icon ion-md-folder mr-2 lead"></i>Inventario
                 </a>
+                 <a href="{% url 'envios_listar' %}" class="d-block text-light p-3">
+        <i class="icon ion-md-bicycle mr-2 lead"></i>Envíos
+                 </a>
+                 {% if usuario.tipo_usu == 'administrador' %}
+    <a href="{% url 'mensajeria_listar' %}" class="d-block text-light p-3">
+        <i class="icon ion-md-bus mr-2 lead"></i>Mensajería
+    </a>
+    {% endif %}
             </div>
     </div>
 

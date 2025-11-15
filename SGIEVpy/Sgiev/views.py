@@ -256,6 +256,92 @@ def eliminar_producto(request, id):
     producto.delete()
     return redirect('list_producto')
 
+#VENTA DE PROVEEDOR
+from decimal import Decimal
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
+from django.db import transaction
+
+@login_required
+@transaction.atomic
+def crear_compra_proveedor(request, idproveedor):
+    proveedor = get_object_or_404(Proveedor, id=idproveedor)
+    productos = Producto.objects.filter(activo=1)
+
+    if request.method == "POST":
+        print("POST RECIBIDO:", request.POST)
+
+        tipo = request.POST.get("tipo_producto")
+        estado = request.POST.get("estado_compra", "pendiente")
+        observaciones = request.POST.get("observaciones", "")
+        numero_factura = request.POST.get("numero_factura", "")
+
+        cantidad = int(request.POST.get("cantidad", "0"))
+        precio_unitario = Decimal(request.POST.get("valor_unitario") or "0")
+        subtotal_linea = cantidad * precio_unitario
+        iva = subtotal_linea * Decimal("0.19")
+        total = subtotal_linea + iva
+
+        # --- SI EL PRODUCTO ES NUEVO ---
+        if tipo == "nuevo":
+            producto = Producto.objects.create(
+                nombre_producto=request.POST.get('nombre_producto'),
+                descripcion_producto=request.POST.get('descripcion_producto', ''),
+                codigo_barras=request.POST.get('codigo_barras', ''),
+                registrosaniario=request.POST.get('registrosaniario', ''),
+                precio_compra=precio_unitario,
+                precio_venta=Decimal(request.POST.get('precio_venta') or '0'),
+                margen_ganancia=Decimal('0'),
+                stock_actual=0,
+                stock_minimo=int(request.POST.get('stock_minimo') or 1),
+                stock_maximo=int(request.POST.get('stock_maximo') or 1000),
+                fecha_vencimiento=request.POST.get('fecha_vencimiento') or None,
+                categoria_idcategoria_id=request.POST.get('categoria'),
+                proveedor_idproveedor=proveedor,
+                activo=1
+            )
+        else:
+            producto = get_object_or_404(Producto, id=request.POST.get("producto_id"))
+
+        # crear compra principal
+        compra = Compra_proveedor.objects.create(
+            numero_factura_compra=numero_factura if numero_factura else f"CMP{Compra_proveedor.objects.count()+1}",
+            subtotal_compra=subtotal_linea,
+            iva_compra=iva,
+            total_compra=total,
+            estado_compra=estado,
+            observaciones_compra=observaciones,
+            imagen_factura_compra="",  # no viene en el formulario
+            usuarios_id_usuario=request.user,
+            producto_idproducto=producto
+        )
+
+        # crear detalle
+        Compra_detalle.objects.create(
+            compra_idcompra=compra,
+            producto_idproducto=producto,
+            cantidad=cantidad,
+            precio_compra_unitario=precio_unitario,
+            subtotal_linea_compra=subtotal_linea,
+            lote=request.POST.get("lote", ""),
+            fecha_vencimiento=request.POST.get("fecha_vencimiento") or None
+        )
+
+        # actualizar stock
+        producto.stock_actual += cantidad
+        producto.precio_compra = precio_unitario
+        producto.save()
+
+        messages.success(request, "Compra registrada exitosamente.")
+        return redirect("listar_proveedores")
+
+    return render(request, "proveedor/crear_compra.html", {
+        "proveedor": proveedor,
+        "productos": productos,
+    })
+
+
+
 #PROVEEDOR
 
 def listar_proveedores(request):

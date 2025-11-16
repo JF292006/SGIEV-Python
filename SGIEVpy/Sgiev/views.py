@@ -16,7 +16,9 @@ from .models import (
     Venta_has_producto, 
     Movimiento_inventario,
     Envio, 
-    Mensajeria
+    Mensajeria,
+    Compra_proveedor,
+    Compra_detalle
 )
 from .forms import LoginForm, UsuarioForm, VentaForm, AgregarProductoForm,EditarEstadoVentaForm,EnvioForm, MensajeriaForm
 from .decorators import admin_required
@@ -262,48 +264,92 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.db import transaction
 
-@login_required
+@login_required 
 @transaction.atomic
 def crear_compra_proveedor(request, idproveedor):
     proveedor = get_object_or_404(Proveedor, id=idproveedor)
     productos = Producto.objects.filter(activo=1)
+    categorias = Categoria.objects.filter(activo=1)
 
     if request.method == "POST":
-        print("POST RECIBIDO:", request.POST)
-
+        # 1. Recolección y Validación de Datos Comunes
         tipo = request.POST.get("tipo_producto")
-        estado = request.POST.get("estado_compra", "pendiente")
+        estado = request.POST.get("estado_compra", "recibida")
         observaciones = request.POST.get("observaciones", "")
         numero_factura = request.POST.get("numero_factura", "")
+        fecha_vencimiento_detalle = request.POST.get("fecha_vencimiento") or None
+        lote = request.POST.get("lote", "")
+        
+        try:
+            cantidad = int(request.POST.get("cantidad", "0"))
+            precio_unitario = Decimal(request.POST.get("valor_unitario") or "0")
+        except:
+            messages.error(request, "Error en el formato de la cantidad o el valor unitario.")
+            # Se debe regresar al mismo formulario para conservar los datos si es posible.
+            return redirect("listar_proveedores") 
 
-        cantidad = int(request.POST.get("cantidad", "0"))
-        precio_unitario = Decimal(request.POST.get("valor_unitario") or "0")
+        if cantidad <= 0 or precio_unitario <= Decimal('0'):
+            messages.error(request, "La cantidad y el precio unitario deben ser mayores a cero.")
+            return redirect("listar_proveedores")
+
         subtotal_linea = cantidad * precio_unitario
         iva = subtotal_linea * Decimal("0.19")
         total = subtotal_linea + iva
 
-        # --- SI EL PRODUCTO ES NUEVO ---
+        producto = None
+        
+        # 2. PROCESAMIENTO DEL PRODUCTO (Nuevo o Existente)
         if tipo == "nuevo":
+            categoria_id = request.POST.get('categoria')
+            nombre_producto = request.POST.get('nombre_producto')
+            precio_venta_post = request.POST.get('precio_venta')
+
+            if not categoria_id or not nombre_producto:
+                 messages.error(request, "Nombre y Categoría son requeridos para el producto nuevo.")
+                 return redirect("listar_proveedores")
+            
+            # La fecha de vencimiento es opcional en la compra, pero si el producto es nuevo y es un campo obligatorio
+            # en el modelo Producto, se debe validar aquí o asegurarse de que el modelo permita null=True.
+            
+            categoria_obj = get_object_or_404(Categoria, id=categoria_id)
+            precio_venta = Decimal(precio_venta_post or '0')
+
+            # CÁLCULO DEL MARGEN AUTOMÁTICO
+            margen_calculado = Decimal('0.00')
+            if precio_unitario > Decimal('0'):
+                margen_calculado = ((precio_venta - precio_unitario) / precio_unitario) * Decimal('100.00')
+                margen_calculado = margen_calculado.quantize(Decimal('0.01'))
+
+            # CREACIÓN DEL PRODUCTO NUEVO
             producto = Producto.objects.create(
-                nombre_producto=request.POST.get('nombre_producto'),
+                nombre_producto=nombre_producto,
                 descripcion_producto=request.POST.get('descripcion_producto', ''),
                 codigo_barras=request.POST.get('codigo_barras', ''),
                 registrosaniario=request.POST.get('registrosaniario', ''),
                 precio_compra=precio_unitario,
-                precio_venta=Decimal(request.POST.get('precio_venta') or '0'),
-                margen_ganancia=Decimal('0'),
-                stock_actual=0,
+                precio_venta=precio_venta,
+                margen_ganancia=margen_calculado,
+                stock_actual=0, # Inicialmente 0
                 stock_minimo=int(request.POST.get('stock_minimo') or 1),
                 stock_maximo=int(request.POST.get('stock_maximo') or 1000),
-                fecha_vencimiento=request.POST.get('fecha_vencimiento') or None,
-                categoria_idcategoria_id=request.POST.get('categoria'),
+                fecha_vencimiento=fecha_vencimiento_detalle, # Usar la fecha del detalle
+                categoria_idcategoria=categoria_obj, 
                 proveedor_idproveedor=proveedor,
                 activo=1
             )
         else:
-            producto = get_object_or_404(Producto, id=request.POST.get("producto_id"))
+            # PRODUCTO EXISTENTE
+            producto_id = request.POST.get("producto_id")
+            if not producto_id:
+                messages.error(request, "Debe seleccionar un producto existente.")
+                return redirect("listar_proveedores")
+            producto = get_object_or_404(Producto, id=producto_id)
 
-        # crear compra principal
+       # CREACIÓN DE LA COMPRA Y EL DETALLE 
+        if not hasattr(request.user, 'pk'):
+             messages.error(request, "Usuario no autenticado correctamente.")
+             return redirect("login") 
+
         compra = Compra_proveedor.objects.create(
             numero_factura_compra=numero_factura if numero_factura else f"CMP{Compra_proveedor.objects.count()+1}",
             subtotal_compra=subtotal_linea,
@@ -311,25 +357,29 @@ def crear_compra_proveedor(request, idproveedor):
             total_compra=total,
             estado_compra=estado,
             observaciones_compra=observaciones,
-            imagen_factura_compra="",  # no viene en el formulario
+            imagen_factura_compra="",
             usuarios_id_usuario=request.user,
-            producto_idproducto=producto
+            producto_idproducto=producto 
         )
 
-        # crear detalle
         Compra_detalle.objects.create(
             compra_idcompra=compra,
             producto_idproducto=producto,
             cantidad=cantidad,
             precio_compra_unitario=precio_unitario,
             subtotal_linea_compra=subtotal_linea,
-            lote=request.POST.get("lote", ""),
-            fecha_vencimiento=request.POST.get("fecha_vencimiento") or None
+            lote=lote,
+            fecha_vencimiento=fecha_vencimiento_detalle
         )
 
-        # actualizar stock
+       # ACTUALIZAR STOCK Y PRECIO DE COMPRA 
         producto.stock_actual += cantidad
-        producto.precio_compra = precio_unitario
+        producto.precio_compra = precio_unitario 
+        
+        if producto.precio_venta > Decimal('0') and producto.precio_compra > Decimal('0'):
+             nuevo_margen = ((producto.precio_venta - producto.precio_compra) / producto.precio_compra) * Decimal('100.00')
+             producto.margen_ganancia = nuevo_margen.quantize(Decimal('0.01'))
+
         producto.save()
 
         messages.success(request, "Compra registrada exitosamente.")
@@ -338,9 +388,34 @@ def crear_compra_proveedor(request, idproveedor):
     return render(request, "proveedor/crear_compra.html", {
         "proveedor": proveedor,
         "productos": productos,
+        "categorias": categorias,
     })
 
+#DETALLE COMPRA PROVEEDOR
+def detalle_compra_proveedor(request, compra_id):
 
+    compra = get_object_or_404(Compra_proveedor, pk=compra_id)  
+
+    detalles = Compra_detalle.objects.filter(compra_idcompra=compra)
+    
+    proveedor = detalles.first().producto_idproducto.proveedor_idproveedor if detalles.exists() else None
+    
+    context = {
+        'compra': compra,
+        'detalles': detalles,
+        'proveedor': proveedor,
+    }
+    
+    return render(request, 'proveedor/detalle_compra_proveedor.html', context)
+
+def listar_compras_proveedor(request):
+    compras = Compra_proveedor.objects.all().order_by('-fecha_compra')
+    
+    context = {
+        'compras': compras,
+    }
+    
+    return render(request, 'proveedor/listar_compras.html', context)
 
 #PROVEEDOR
 

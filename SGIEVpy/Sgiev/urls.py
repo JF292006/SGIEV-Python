@@ -27,6 +27,8 @@ urlpatterns = [
     path('proveedores/editar/<int:id>/', views.editar_proveedor, name='editar_proveedor'),
     path('proveedores/eliminar/<int:id>/', views.eliminar_proveedor, name='eliminar_proveedor'),
     path('crear_compra_proveedor/<int:idproveedor>/', views.crear_compra_proveedor, name='crear_compra_proveedor'),
+    path('compras/', views.listar_compras_proveedor, name='listar_compras'),
+    path('compra/detalle/<int:compra_id>/', views.detalle_compra_proveedor, name='detalle_compra'),
 
 
     # Index / Landing Page

@@ -43,6 +43,112 @@ def admin(request):
     return render(request, 'admin.html')
 
 
+
+# DASHBOARD (views.py)
+from django.db.models.functions import TruncMonth
+from django.db.models import Count, Sum, Q
+from datetime import date
+from decimal import Decimal
+import json
+from dateutil.relativedelta import relativedelta
+import locale
+
+from django.contrib.auth.decorators import login_required
+# importa tus modelos reales
+# from .models import Venta, Venta_has_producto, Envio
+
+@login_required
+def dashboard(request):
+    usuario = request.user.usuarios
+    es_admin = (usuario.tipo_usu == 'administrador')
+    hoy = date.today()
+    primer_dia_mes = hoy.replace(day=1)
+
+    # filtro para considerar ventas del mes o ventas sin fecha (creadas pero no facturadas)
+    filtro_mes_actual_con_null = Q(fecha_factura__gte=primer_dia_mes) | Q(fecha_factura__isnull=True)
+
+    # 1) Ingresos del mes (sum valor_total)
+    ventas_mes_actual = Venta.objects.filter(filtro_mes_actual_con_null)
+    ingresos_mes = ventas_mes_actual.aggregate(total=Sum('valor_total'))['total'] or Decimal('0.00')
+
+    # 2) Productos vendidos en el mes (sum cantidad en la tabla intermedia)
+    # NOTA: en tu proyecto el FK en Venta_has_producto parece llamarse 'venta_idfactura' en otros puntos,
+    # por eso usamos venta_idfactura__fecha_factura aquí. Adáptalo si tu campo se llama distinto.
+    productos_vendidos_mes = Venta_has_producto.objects.filter(
+        Q(venta_idfactura__fecha_factura__gte=primer_dia_mes) | Q(venta_idfactura__fecha_factura__isnull=True)
+    ).aggregate(total=Sum('cantidad'))['total'] or 0
+
+    # 3) Envios activos (excluir entregado/cancelado)
+    envios_activos = Envio.objects.exclude(estado_envio__in=['entregado', 'cancelado']).count()
+
+    # 4) Ventas totales (suma del último año — lo dejas así o cambias a "suma total histórica")
+    hace_un_anio = hoy - relativedelta(years=1)
+    ventas_totales = Venta.objects.filter(fecha_factura__gte=hace_un_anio).aggregate(total=Sum('valor_total'))['total'] or Decimal('0.00')
+
+    estadisticas_dashboard = {
+        'ingresos_mes': ingresos_mes,
+        'ingresos_porcentaje': "50.5",   # si quieres calcular %, reemplaza con lógica real
+        'ventas_totales': ventas_totales,
+        'ventas_porcentaje': "30.2",
+        'productos_vendidos': productos_vendidos_mes,
+        'productos_porcentaje': "15.8",
+        'envios_activos': envios_activos,
+    }
+
+    # VENTAS RECIENTES - obtener los últimos 10 (o 5). Usamos select_related para evitar N+1.
+    ventas_recientes = Venta.objects.select_related('usuarios_id_usuario') \
+        .order_by('-fecha_factura', '-id')[:10]
+
+    # DATOS PARA LA GRAFICA - últimos N meses (agrupado por mes con TruncMonth)
+    meses_a_mostrar = 6
+    fecha_inicio_grafico = (hoy.replace(day=1) - relativedelta(months=meses_a_mostrar - 1))
+    ventas_mensuales_qs = Venta.objects.filter(
+        fecha_factura__gte=fecha_inicio_grafico,
+        fecha_factura__isnull=False
+    ).annotate(
+        mes=TruncMonth('fecha_factura')
+    ).values('mes').annotate(
+        total_ventas=Sum('valor_total')
+    ).order_by('mes')
+
+    # Mapa mes -> total (usar clave año-mes para evitar ambigüedad)
+    ventas_map = { item['mes'].strftime("%Y-%m"): float(item['total_ventas'] or 0) for item in ventas_mensuales_qs }
+
+    # Tratar locales (intentar español para abreviaciones de mes)
+    try:
+        locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+    except locale.Error:
+        # si falla en el servidor, seguimos sin lanzar excepción
+        pass
+
+    grafico_ventas_labels = []
+    grafico_ventas_data = []
+    mes_actual = hoy.replace(day=1)
+    # generamos meses desde el más antiguo al actual
+    for i in range(meses_a_mostrar - 1, -1, -1):
+        mes_iterado = mes_actual - relativedelta(months=i)
+        key = mes_iterado.strftime("%Y-%m")
+        label = mes_iterado.strftime("%b").capitalize()  # Ene, Feb, ...
+        grafico_ventas_labels.append(label)
+        grafico_ventas_data.append(ventas_map.get(key, 0))
+
+    # Serializar para la plantilla (ya son listas, json.dumps produce arrays JS)
+    estadisticas_dashboard['grafico_ventas_labels'] = json.dumps(grafico_ventas_labels, ensure_ascii=False)
+    estadisticas_dashboard['grafico_ventas_data'] = json.dumps(grafico_ventas_data)
+
+    # También puedes enviar un historial (tabla) con paginación simple: últimas 10 ventas
+    historial_ventas = Venta.objects.select_related('usuarios_id_usuario').order_by('-fecha_factura', '-id')[:10]
+
+    context = {
+        'usuario': usuario,
+        'es_admin': es_admin,
+        'estadisticas_dashboard': estadisticas_dashboard,
+        'ventas_recientes': ventas_recientes,
+        'historial_ventas': historial_ventas,
+    }
+    return render(request, 'dashboard.html', context)
+
+
 # CATEGORIA
 
 def inicio_cat(request):

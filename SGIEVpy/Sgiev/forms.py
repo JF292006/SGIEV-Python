@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib.auth.hashers import make_password, check_password
-from .models import Usuarios, Venta, Producto, Venta_has_producto, Envio, Mensajeria
+from .models import Usuarios, Venta, Producto, Venta_has_producto, Envio, Mensajeria, Proveedor
 from decimal import Decimal
 
 # ===== FORMULARIOS DE MENSAJERÍA =====
@@ -561,3 +561,8 @@ class UsuarioForm(forms.ModelForm):
             usuario.save()
         
         return usuario
+    
+    from django import forms
+from .models import Proveedor
+
+

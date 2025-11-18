@@ -1,180 +1,149 @@
-{% load static %}
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <title>Proveedores | Romar Natural</title>
+{% extends 'proveedor/base_prov.html' %}
 
-  <!-- Bootstrap & Icons -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
-  <link href="https://unpkg.com/ionicons@4.5.10-0/dist/css/ionicons.min.css" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300;1,300&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'css/style.css' %}">
-</head>
+{% block title %}Lista de Proveedores - Romar Natural{% endblock %}
 
-<body>
-  <div class="d-flex">
-    <div id="sidebar-container" class="bg-primary">
-      <div class="logo"><h4 class="text-light font-weight-bold">Romar Natural</h4></div>
-      <div class="menu">
-        <a href="{% url 'dashboard' %}" class="d-block text-light p-3"><i class="icon ion-md-apps mr-2"></i>Panel</a>
-        <a href="{% url 'usuarios_listar' %}" class="d-block text-light p-3"><i class="icon ion-md-contacts mr-2 lead"></i>Usuarios</a>
-        <a href="{% url 'listar_proveedores' %}" class="d-block text-light p-3"><i class="icon ion-md-cube mr-2 lead"></i>Proveedores</a>
-        <a href="{% url 'ventas_listar'%}" class="d-block text-light p-3"><i class="icon ion-md-cart mr-2 lead"></i>Ventas</a>
-        <a href="{% url 'list_categoria' %}" class="d-block text-light p-3"><i class="icon ion-md-copy mr-2 lead"></i>Categoria</a>
-        <a href="{% url 'list_producto' %}" class="d-block text-light p-3"><i class="icon ion-md-folder mr-2 lead"></i>Inventario</a>
-        <a href="{% url 'envios_listar' %}" class="d-block text-light p-3"><i class="icon ion-md-bicycle mr-2 lead"></i>Envíos</a>
-        <a href="{% url 'mensajeria_listar' %}" class="d-block text-light p-3"><i class="icon ion-md-bus mr-2 lead"></i>Mensajería</a>
-      </div>
-    </div>
+{% block content %}
+<div class="container-fluid">
 
-    <!-- Main content -->
-    <div class="w-100">
-      <!-- Navbar -->
-      <nav class="navbar navbar-expand-lg navbar-light bg-light">
-        <div class="container-fluid">
-          <form class="form-inline my-2 my-lg-0 ml-0 d-flex align-items-center">
-            <input class="form-control mr-2" type="search" placeholder="Buscar" aria-label="Buscar">
-            <button class="btn btn-outline-success my-2 my-sm-0" type="button">
-              <i class="icon ion-md-search"></i>
-            </button>
-          </form>
-
-          <ul class="navbar-nav ml-auto">
-            <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle" href="#" data-toggle="dropdown">Administrador</a>
-              <div class="dropdown-menu dropdown-menu-right">
-                <a class="dropdown-item" href="#">Mi perfil</a>
-                <div class="dropdown-divider"></div>
-                <a class="dropdown-item" href="#">Cerrar sesión</a>
-              </div>
-            </li>
-          </ul>
-        </div>
-      </nav>
-
-      <!-- Content -->
-      <div id="content" class="p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h2 class="font-weight-bold text-success">Gestión de Proveedores</h2>
-
-          <div class="d-flex">
-            <a class="btn btn-success mr-2" href="{% url 'registrar_proveedor' %}">
-              <i class="icon ion-md-add"></i> Nuevo Proveedor
-            </a>
-            <button class="btn btn-info">
-              <i class="icon ion-md-document"></i> Generar Reporte
-            </button>
-
-            <div class="d-flex">
-            <a class="btn btn-primary mr-2" href="{% url 'listar_compras' %}">
-              <i class="icon ion-md-list"></i> Historial de Compras
-            </a>
-            </div>
-            
-<div class="input-group mr-1" style="width: 360px;">
-  <select id="prov_seleccion" class="form-control">
-    <option value="">Selecciona proveedor...</option>
-    {% for prov in proveedores %}
-      <option value="{{ prov.pk }}">{{ prov.nombre_proveedor }}</option>
-    {% endfor %}
-  </select>
-  <div class="input-group-append">
- 
-    <button id="btn_compra" class="btn btn-sm btn-info" type="button" disabled
-            data-url-template="{% url 'crear_compra_proveedor' 0 %}">
-      <i class="icon ion-md-cart"></i> Compra
-    </button>
-  </div>
-</div>
-
-<script>
-  (function(){
-    const sel = document.getElementById('prov_seleccion');
-    const btn = document.getElementById('btn_compra');
-
-    sel.addEventListener('change', function(){
-      btn.disabled = !this.value;
-    });
-
-    btn.addEventListener('click', function(){
-      const id = sel.value;
-      if(!id) return;
-      const tmpl = this.getAttribute('data-url-template'); 
-
-      const target = tmpl.replace('/0/', '/' + id + '/');
-      window.location.href = target;
-    });
-  })();
-</script>
-
-
-          </div>
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <h2 class="font-weight-bold">
+                <i class="icon ion-md-cube"></i> Gestión de Proveedores
+            </h2>
+            <p class="text-muted">Administra los proveedores del sistema</p>
         </div>
 
-        {% if proveedores %}
-        <table class="table table-striped table-hover">
-          <thead class="bg-primary text-light">
-            <tr>
-              <th>ID</th>
-              <th>Nombre</th>
-              <th>Correo</th>
-              <th>Teléfono</th>
-              <th>Dirección</th>
-              <th>NIT</th>
-              <th>Contacto</th>
-              <th>Tel. Contacto</th>
-              <th>Activo</th>
-              <th class="text-center">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for p in proveedores %}
-            <tr>
-              <td>{{ p.id }}</td>
-              <td>{{ p.nombre_proveedor }}</td>
-              <td>{{ p.correo_proveedor }}</td>
-              <td>{{ p.telefono }}</td>
-              <td>{{ p.direccion }}</td>
-              <td>{{ p.nit }}</td>
-              <td>{{ p.contacto_nombre }}</td>
-              <td>{{ p.contacto_telefono }}</td>
-              <td>{% if p.activo %}Sí{% else %}No{% endif %}</td>
-              <td class="text-center">
-  <a href="{% url 'editar_proveedor' p.id %}" class="btn btn-sm btn-warning mr-1">
-    <i class="icon ion-md-create"></i> Editar
-  </a>
+        <div class="col-md-6 text-right d-flex justify-content-end align-items-center">
 
-  {% if p.pk %}
-    <a href="{% url 'crear_compra_proveedor' p.pk %}" class="btn btn-sm btn-info mr-1">
-      <i class="icon ion-md-cart"></i> Compra
+    <a href="{% url 'registrar_proveedor' %}" class="btn btn-success btn-compact mr-2">
+        <i class="icon ion-md-add-circle"></i> Nuevo Proveedor
     </a>
-  {% else %}
-    <button class="btn btn-sm btn-secondary mr-1" disabled title="Proveedor sin ID">Compra</button>
-  {% endif %}
 
-  <a href="{% url 'eliminar_proveedor' p.id %}" class="btn btn-sm btn-danger"
-     onclick="return confirm('¿Seguro que deseas eliminar este proveedor?');">
-    <i class="icon ion-md-trash"></i> Eliminar
-  </a>
-</td>
+    <a href="{% url 'listar_compras' %}" class="btn btn-primary btn-compact mr-2">
+        <i class="icon ion-md-list"></i> Historial de Compras
+    </a>
 
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% else %}
-          <p class="text-center mt-4">No hay proveedores registrados.</p>
-        {% endif %}
-      </div>
+    <button class="btn btn-info btn-compact">
+        <i class="icon ion-md-document"></i> Generar Reporte
+    </button>
+
+</div>
     </div>
-  </div>
 
-  <!-- Scripts -->
-  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-</body>
-</html>
+    <!-- Selector rápido para compras -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="input-group">
+                <select id="prov_seleccion" class="form-control">
+                    <option value="">Selecciona proveedor...</option>
+                    {% for prov in proveedores %}
+                        <option value="{{ prov.id }}">{{ prov.nombre_proveedor }}</option>
+                    {% endfor %}
+                </select>
+
+                <div class="input-group-append">
+                    <button id="btn_compra" class="btn btn-info" disabled
+                            data-url-template="{% url 'crear_compra_proveedor' 0 %}">
+                        <i class="icon ion-md-cart"></i> Compra
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+      (function(){
+        const sel = document.getElementById('prov_seleccion');
+        const btn = document.getElementById('btn_compra');
+
+        sel.addEventListener('change', function(){
+          btn.disabled = !this.value;
+        });
+
+        btn.addEventListener('click', function(){
+          const id = sel.value;
+          if(!id) return;
+          const tmpl = this.getAttribute('data-url-template');
+          const target = tmpl.replace('/0/', '/' + id + '/');
+          window.location.href = target;
+        });
+      })();
+    </script>
+
+    <!-- Tabla de proveedores -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>Correo</th>
+                            <th>Teléfono</th>
+                            <th>Dirección</th>
+                            <th>NIT</th>
+                            <th>Contacto</th>
+                            <th>Tel. Contacto</th>
+                            <th>Activo</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for p in proveedores %}
+                        <tr>
+                            <td>{{ p.id }}</td>
+                            <td><strong>{{ p.nombre_proveedor }}</strong></td>
+                            <td>{{ p.correo_proveedor }}</td>
+                            <td>{{ p.telefono }}</td>
+                            <td>{{ p.direccion }}</td>
+                            <td>{{ p.nit }}</td>
+                            <td>{{ p.contacto_nombre }}</td>
+                            <td>{{ p.contacto_telefono }}</td>
+
+                            <td>
+                                {% if p.activo %}
+                                    <span class="badge badge-success">Sí</span>
+                                {% else %}
+                                    <span class="badge badge-secondary">No</span>
+                                {% endif %}
+                            </td>
+
+                            <td class="text-center">
+                                <div class="btn-group">
+                                    <a href="{% url 'editar_proveedor' p.id %}" class="btn btn-sm btn-warning" title="Editar">
+                                        <i class="icon ion-md-create"></i>
+                                    </a>
+
+                                    <a href="{% url 'crear_compra_proveedor' p.id %}" class="btn btn-sm btn-info" title="Compra">
+                                        <i class="icon ion-md-cart"></i>
+                                    </a>
+
+                                    <a href="{% url 'eliminar_proveedor' p.id %}"
+                                       class="btn btn-sm btn-danger"
+                                       onclick="return confirm('¿Seguro que deseas eliminar este proveedor?');"
+                                       title="Eliminar">
+                                        <i class="icon ion-md-trash"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="10" class="text-center py-4">
+                                <i class="icon ion-md-alert" style="font-size: 3rem; color: #ccc;"></i>
+                                <p class="text-muted">No se encontraron proveedores</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

@@ -1,126 +1,118 @@
-{% load static %}
-<!doctype html>
-<html lang="es">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>Detalle de Compra #{{ compra.numero_factura_compra }} | Romar Natural</title>
+{% extends "proveedor/base_prov.html" %}
 
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
-    <link href="https://unpkg.com/ionicons@4.5.10-0/dist/css/ionicons.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300;1,300&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'css/style.css' %}">
-</head>
+{% block title %}Detalle de Compra #{{ compra.numero_factura_compra }} - Romar Natural{% endblock %}
 
-<body>
-    <div class="d-flex">
-    
-        <div id="sidebar-container" class="bg-primary">
-            <div class="logo">
-                <h4 class="text-light font-weight-bold">Romar Natural</h4>
-            </div>
-            <div class="menu">
-                <a href="{% url 'dashboard' %}" class="d-block text-light p-3"><i class="icon ion-md-apps mr-2"></i>Panel</a>
-                </div>
+{% block content %}
+<div class="container-fluid">
+
+    <!-- Encabezado -->
+    <div class="row mb-4">
+        <div class="col-md-7">
+            <h2 class="font-weight-bold">
+                <i class="icon ion-md-document"></i> Detalle de Compra #{{ compra.numero_factura_compra }}
+            </h2>
+            <p class="text-muted">Información detallada de la compra registrada</p>
         </div>
 
-        <div class="w-100">
-            <nav class="navbar navbar-expand-lg navbar-light bg-light">
-                 <div class="container-fluid">
-                    <form class="form-inline my-2 my-lg-0 ml-0 d-flex align-items-center">
-                        <input class="form-control mr-2" type="search" placeholder="Buscar" aria-label="Buscar">
-                        <button class="btn btn-outline-success my-2 my-sm-0" type="button">
-                            <i class="icon ion-md-search"></i>
-                        </button>
-                    </form>
-
-                    <ul class="navbar-nav ml-auto">
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" data-toggle="dropdown">Administrador</a>
-                            <div class="dropdown-menu dropdown-menu-right">
-                                <a class="dropdown-item" href="#">Mi perfil</a>
-                                <div class="dropdown-divider"></div>
-                                <a class="dropdown-item" href="#">Cerrar sesión</a>
-                            </div>
-                        </li>
-                    </ul>
-                </div>
-            </nav>
-
-            <div id="content" class="p-4">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h2 class="font-weight-bold text-primary">Detalle de Compra: #{{ compra.numero_factura_compra }}</h2>
-                    <a class="btn btn-secondary" href="{% url 'listar_compras' %}">
-                        <i class="icon ion-md-arrow-back"></i> Volver a Compras
-                    </a>
-                </div>
-
-                <div class="card shadow-sm border-0 mb-4">
-                    <div class="card-header bg-light font-weight-bold">
-                        📋 Información General de la Compra
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-4">
-                                <p><strong>Fecha de Compra:</strong> {{ compra.fecha_compra|date:"Y-m-d H:i" }}</p>
-                                <p><strong>Estado:</strong> <span class="badge badge-{% if compra.estado_compra == 'recibida' %}success{% elif compra.estado_compra == 'cancelada' %}danger{% else %}warning{% endif %}">{{ compra.get_estado_compra_display }}</span></p>
-                            </div>
-                            <div class="col-md-4">
-                                <p><strong>Registrado por:</strong> {{ compra.usuarios_id_usuario.nombre_completo }}</p>
-                                <p><strong>Proveedor:</strong> {{ proveedor.nombre_proveedor|default:"N/A" }}</p>
-                            </div>
-                            <div class="col-md-4 text-right">
-                                <p><strong>Subtotal:</strong> ${{ compra.subtotal_compra|floatformat:2 }}</p>
-                                <p><strong>IVA:</strong> ${{ compra.iva_compra|floatformat:2 }}</p>
-                                <h4 class="text-primary"><strong>Total de la Compra:</strong> ${{ compra.total_compra|floatformat:2 }}</h4>
-                            </div>
-                        </div>
-                        <div class="mt-3">
-                             <p><strong>Observaciones:</strong> {{ compra.observaciones_compra|default:"Sin observaciones." }}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <h3 class="font-weight-bold text-success mt-5 mb-3">📦 Productos Recibidos</h3>
-                <div class="card shadow-sm border-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="bg-primary text-light">
-                                <tr>
-                                    <th>Producto</th>
-                                    <th>Cantidad</th>
-                                    <th>Precio Unitario</th>
-                                    <th>Lote</th>
-                                    <th>Vencimiento</th>
-                                    <th>Subtotal Línea</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for detalle in detalles %}
-                                <tr>
-                                    <td>{{ detalle.producto_idproducto.nombre_producto }}</td>
-                                    <td>{{ detalle.cantidad }}</td>
-                                    <td>${{ detalle.precio_compra_unitario|floatformat:2 }}</td>
-                                    <td>{{ detalle.lote }}</td>
-                                    <td>{{ detalle.fecha_vencimiento|date:"Y-m-d" }}</td>
-                                    <td>${{ detalle.subtotal_linea_compra|floatformat:2 }}</td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted">No se encontraron detalles para esta compra.</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-            </div>
+        <div class="col-md-5 d-flex justify-content-end align-items-center">
+            <a href="{% url 'listar_compras' %}" class="btn btn-secondary btn-compact">
+                <i class="icon ion-md-arrow-back"></i> Volver
+            </a>
         </div>
     </div>
 
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
-</body>
-</html>
+    <!-- Card: Información general -->
+    <div class="card mb-4">
+        <div class="card-header bg-light font-weight-bold">
+            <i class="icon ion-md-information-circle-outline"></i> Información General
+        </div>
+
+        <div class="card-body">
+
+            <div class="row">
+
+                <div class="col-md-4 mb-3">
+                    <p><strong>Fecha de Compra:</strong> {{ compra.fecha_compra|date:"Y-m-d H:i" }}</p>
+
+                    <p><strong>Estado:</strong>
+                        <span class="badge 
+                            {% if compra.estado_compra == 'recibida' %}badge-success
+                            {% elif compra.estado_compra == 'cancelada' %}badge-danger
+                            {% else %}badge-warning
+                            {% endif %}
+                        ">
+                            {{ compra.get_estado_compra_display }}
+                        </span>
+                    </p>
+                </div>
+
+                <div class="col-md-4 mb-3">
+                    <p><strong>Registrado por:</strong> {{ compra.usuarios_id_usuario.nombre_completo }}</p>
+                    <p><strong>Proveedor:</strong> {{ proveedor.nombre_proveedor|default:"N/A" }}</p>
+                </div>
+
+                <div class="col-md-4 mb-3 text-right">
+                    <p><strong>Subtotal:</strong> ${{ compra.subtotal_compra|floatformat:2 }}</p>
+                    <p><strong>IVA:</strong> ${{ compra.iva_compra|floatformat:2 }}</p>
+                    <h4 class="text-primary"><strong>Total:</strong> ${{ compra.total_compra|floatformat:2 }}</h4>
+                </div>
+
+            </div>
+
+            <hr>
+
+            <p><strong>Observaciones:</strong> {{ compra.observaciones_compra|default:"Sin observaciones." }}</p>
+
+        </div>
+    </div>
+
+    <!-- Productos recibidos -->
+    <h4 class="mb-3 font-weight-bold text-success">
+        <i class="icon ion-md-cube"></i> Productos Recibidos
+    </h4>
+
+    <div class="card">
+        <div class="card-body p-0">
+
+            {% if detalles %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>Producto</th>
+                            <th>Cantidad</th>
+                            <th>Precio Unitario</th>
+                            <th>Lote</th>
+                            <th>Vencimiento</th>
+                            <th>Subtotal</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for d in detalles %}
+                        <tr>
+                            <td>{{ d.producto_idproducto.nombre_producto }}</td>
+                            <td>{{ d.cantidad }}</td>
+                            <td>${{ d.precio_compra_unitario|floatformat:2 }}</td>
+                            <td>{{ d.lote }}</td>
+                            <td>{{ d.fecha_vencimiento|date:"Y-m-d" }}</td>
+                            <td>${{ d.subtotal_linea_compra|floatformat:2 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+
+                </table>
+            </div>
+
+            {% else %}
+            <div class="text-center p-5">
+                <i class="icon ion-md-alert" style="font-size:3rem;color:#ccc;"></i>
+                <p class="text-muted mt-2">No se encontraron detalles asociados a esta compra.</p>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+
+</div>
+{% endblock %}

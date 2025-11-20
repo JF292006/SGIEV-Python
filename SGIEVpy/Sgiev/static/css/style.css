@@ -41,3 +41,19 @@ a:hover{
 .stat{
     border-right: 1px solid var(--grey);
 }
+
+
+/* Botones compactos sin afectar nada más */
+.btn-compact {
+    padding: .35rem .75rem;
+    font-size: 0.85rem;
+    line-height: 1.2;
+    border-radius: 0.35rem;
+    white-space: nowrap; /* evita que el texto se parta */
+}
+
+.btn-compact .icon {
+    font-size: 1rem;
+    margin-right: .3rem;
+    vertical-align: middle;
+}

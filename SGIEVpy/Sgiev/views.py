@@ -823,11 +823,12 @@ def listar_compras_proveedor(request):
     return render(request, 'proveedor/listar_compras.html', context)
 
 #PROVEEDOR
-
+@admin_required
 def listar_proveedores(request):
     proveedores = Proveedor.objects.all()
     return render(request, 'proveedor/listar_prov.html', {'proveedores': proveedores})
 
+@admin_required
 def registrar_proveedor(request):
     if request.method == 'POST':
         nombre = request.POST.get('nombre_proveedor')
@@ -838,6 +839,12 @@ def registrar_proveedor(request):
         contacto_nombre = request.POST.get('contacto_nombre')
         contacto_telefono = request.POST.get('contacto_telefono')
         activo = request.POST.get('activo')
+        
+        if not nombre or not correo or not telefono or not direccion or not nit:
+            messages.error(request, "Todos los campos obligatorios deben llenarse.")
+            return redirect('registrar_proveedor')
+        
+        
 
         proveedor = Proveedor(
             nombre_proveedor=nombre,
@@ -847,13 +854,14 @@ def registrar_proveedor(request):
             nit=nit,
             contacto_nombre=contacto_nombre,
             contacto_telefono=contacto_telefono,
-            activo=1 if activo == 'on' else 0
+            activo=1 if activo == 'True' else 0
         )
         proveedor.save()
 
         return redirect('listar_proveedores')  # Redirige al listado al terminar
     return render(request, 'proveedor/registrarprov.html')
 
+@admin_required
 def editar_proveedor(request, id):
     proveedor = get_object_or_404(Proveedor, id=id)
 
@@ -871,6 +879,7 @@ def editar_proveedor(request, id):
 
     return render(request, 'proveedor/editar_proveedor.html', {'proveedor': proveedor})
 
+@admin_required
 def eliminar_proveedor(request, id):
     proveedor = get_object_or_404(Proveedor, id=id)
     proveedor.delete()

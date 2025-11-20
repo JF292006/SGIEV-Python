@@ -5,12 +5,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
     <link href="https://unpkg.com/ionicons@4.5.10-0/dist/css/ionicons.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
     
-    <title>{% block title %}Envíos - Romar Natural{% endblock %}</title>
+    <title>{% block title %}Proveedores - Romar Natural{% endblock %}</title>
     
     <style>
         :root {
@@ -82,6 +83,7 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+
     <button class="menu-toggle" onclick="toggleSidebar()">
         <i class="icon ion-md-menu"></i>
     </button>
@@ -97,13 +99,12 @@
         <a href="{% url 'list_categoria' %}" class="d-block text-light p-3"><i class="icon ion-md-copy mr-2 lead"></i>Categoria</a>
         <a href="{% url 'list_producto' %}" class="d-block text-light p-3"><i class="icon ion-md-folder mr-2 lead"></i>Inventario</a>
         <a href="{% url 'envios_listar' %}" class="d-block text-light p-3"><i class="icon ion-md-bicycle mr-2 lead"></i>Envíos</a>
-        {% if usuario.tipo_usu == 'administrador' %}
         <a href="{% url 'mensajeria_listar' %}" class="d-block text-light p-3"><i class="icon ion-md-bus mr-2 lead"></i>Mensajería</a>
-        {% endif %}
       </div>
     </div>
 
         <div class="w-100">
+            <!-- Navbar -->
             <nav class="navbar navbar-expand-lg navbar-light bg-light">
                 <div class="container-fluid">
                     <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent">
@@ -134,7 +135,9 @@
                 </div>
             </nav>
 
+            <!-- Content -->
             <div id="content" class="p-4">
+                <!-- Mensajes -->
                 {% if messages %}
                     {% for message in messages %}
                         <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
@@ -151,7 +154,8 @@
         </div>
     </div>
 
-    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
@@ -159,6 +163,7 @@
             document.getElementById('sidebar-container').classList.toggle('active');
         }
         
+        // Cerrar sidebar al hacer click fuera
         document.addEventListener('click', function(event) {
             var sidebar = document.getElementById('sidebar-container');
             var toggleBtn = document.querySelector('.menu-toggle');

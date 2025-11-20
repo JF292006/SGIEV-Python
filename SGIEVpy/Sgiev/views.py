@@ -36,6 +36,9 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib import colors
+from django.views.decorators.cache import never_cache
+from django.http import HttpResponseRedirect 
+from django.urls import reverse
 
 
 
@@ -219,7 +222,7 @@ def eliminar_categoria(request, id):
     return redirect('list_categoria')
 
 #PRODUCTOS
-
+@never_cache
 def list_producto(request):
     
 
@@ -580,61 +583,61 @@ def registrar_salida_inventario_ajuste(request):
         cantidad_salida = request.POST.get('cantidad_salida')
         motivo_salida = request.POST.get('motivo_salida')
 
-      
+        
         if not producto_id_lote or not producto_id_lote.isdigit():
-            print("Error: ID de lote no válido o faltante.")
+            messages.error(request, "Error: Producto no seleccionado o ID no válido.")
             return redirect('list_producto')
 
         try:
             cantidad = int(cantidad_salida)
-            
-            
-            producto = get_object_or_404(Producto, id=producto_id_lote)
-            
-            usuario = Usuarios.objects.get(id=request.user.id) 
-            
-            
-            print(f"DEBUG 1: LOTE={producto_id_lote}, CÓDIGO={producto.codigo_barras}, STOCK_INICIAL={producto.stock_actual}, CANTIDAD_A_RETIRAR={cantidad}")
-            
         except ValueError:
-            print("Error: Cantidad inválida.")
+            messages.error(request, "Error: Cantidad inválida.")
             return redirect('list_producto')
-        except Producto.DoesNotExist:
-            print("Error: El lote seleccionado no existe.")
-            return redirect('list_producto')
-        except Usuarios.DoesNotExist:
-        
-            print(f"Error de Usuarios: No se encontró la instancia de Usuarios con ID {request.user.id}.")
-            return redirect('list_producto')
-        except Exception as e:
-            
-            print(f"Error desconocido al obtener datos iniciales: {e}")
-            return redirect('list_producto')
-        
-        
-       
-        if cantidad <= 0 or cantidad > producto.stock_actual:
-            print(f"Error: Stock insuficiente. Stock actual del lote {producto.codigo_barras}: {producto.stock_actual}")
-            return redirect('list_producto') 
-        
-     
-        stock_anterior = producto.stock_actual
-        stock_nuevo = stock_anterior - cantidad
-        precio_unitario = producto.precio_compra 
-        valor_total = precio_unitario * cantidad
 
-       
+        
+    
+        response_redirect = HttpResponseRedirect(reverse('list_producto'))
+        response_redirect['Cache-Control'] = 'no-cache, no-store, must-revalidate' 
+    
         try:
             with transaction.atomic():
                 
                
-                Producto.objects.filter(id=producto_id_lote).update(stock_actual=stock_nuevo)
+                producto = Producto.objects.select_for_update().get(id=producto_id_lote)
+                
+               
+                usuario = None
+                if request.user.is_authenticated:
+                    try:
+                        usuario = Usuarios.objects.get(id=request.user.id) 
+                    except Usuarios.DoesNotExist:
+                        
+                        messages.error(request, "Error de autenticación: El usuario logueado no está registrado en el modelo de Usuarios.")
+                        raise Exception("Usuario no encontrado en el modelo Usuarios.") 
+                else:
+                    
+                    messages.error(request, "Error de autenticación: Debe iniciar sesión para registrar movimientos.")
+                    raise Exception("Usuario no autenticado.")
+
+
+                
+                if cantidad <= 0 or cantidad > producto.stock_actual:
+                    messages.error(request, f"Error: Stock insuficiente. Stock actual del lote {producto.codigo_barras}: {producto.stock_actual}")
+                    raise Exception("Stock Insuficiente.")
                 
                 
-                producto_verificado = Producto.objects.get(id=producto_id_lote)
-                print(f"DEBUG POST-UPDATE: Stock verificado en DB: {producto_verificado.stock_actual}")
-              
-             
+                stock_anterior = producto.stock_actual
+                precio_unitario = producto.precio_compra 
+                valor_total = precio_unitario * cantidad
+
+                Producto.objects.filter(id=producto_id_lote).update(stock_actual=F('stock_actual') - cantidad)
+
+                producto.refresh_from_db()
+
+                stock_final_real = producto.stock_actual
+                print(f"DEBUG POST-UPDATE: Stock verificado en DB: {stock_final_real}")
+                
+
                 movimiento = Movimiento_inventario(
                     producto_idproducto=producto, 
                     usuarios_id_usuario=usuario, 
@@ -642,7 +645,7 @@ def registrar_salida_inventario_ajuste(request):
                     tipo_movimiento='ajuste', 
                     cantidad=cantidad,
                     stock_anterior=stock_anterior,
-                    stock_nuevo=stock_nuevo, 
+                    stock_nuevo=stock_final_real, 
                     precio_unitario=precio_unitario,
                     valor_total=valor_total,
                     
@@ -654,15 +657,19 @@ def registrar_salida_inventario_ajuste(request):
                 )
                 movimiento.save()
                 
-            print(f"DEBUG: Ajuste exitoso y movimiento registrado. Nuevo stock: {stock_nuevo}")
-            return redirect('list_producto')
+            messages.success(request, f"Salida de {cantidad} unidades registrada. Nuevo stock: {stock_final_real}")
+            return response_redirect 
             
         except Exception as e:
-            print(f"ERROR FATAL (Rollback): Falló al registrar el ajuste de inventario. CAUSA: {e}")
-            return redirect('list_producto')
+            
+            
+            if str(e) not in ["Stock Insuficiente.", "Usuario no encontrado en el modelo Usuarios.", "Usuario no autenticado."]:
+                 print(f"ERROR FATAL (Rollback): Falló al registrar el ajuste de inventario. CAUSA: {e}")
+                 messages.error(request, "Error fatal al procesar el ajuste. El stock no fue modificado.")
+            
+            return response_redirect 
 
     return redirect('list_producto')
-
 
 #VENTA DE PROVEEDOR
 from decimal import Decimal

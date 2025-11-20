@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db import models, transaction
 from django.http import JsonResponse
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 from .models import (
     Categoria, 
@@ -22,6 +22,20 @@ from .models import (
 )
 from .forms import LoginForm, UsuarioForm, VentaForm, AgregarProductoForm,EditarEstadoVentaForm,EnvioForm, MensajeriaForm
 from .decorators import admin_required
+import json
+from django.utils.safestring import mark_safe
+from django.template.loader import render_to_string
+import openpyxl
+from openpyxl.utils import get_column_letter
+from django.http import HttpResponse
+from django.db.models import Q
+from django.db.models import F 
+from django.template.loader import get_template
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.lib import colors
 
 
 
@@ -44,7 +58,7 @@ def admin(request):
 
 
 
-# DASHBOARD (views.py)
+# DASHBOARD 
 from django.db.models.functions import TruncMonth
 from django.db.models import Count, Sum, Q
 from datetime import date
@@ -54,8 +68,7 @@ from dateutil.relativedelta import relativedelta
 import locale
 
 from django.contrib.auth.decorators import login_required
-# importa tus modelos reales
-# from .models import Venta, Venta_has_producto, Envio
+
 
 @login_required
 def dashboard(request):
@@ -64,30 +77,26 @@ def dashboard(request):
     hoy = date.today()
     primer_dia_mes = hoy.replace(day=1)
 
-    # filtro para considerar ventas del mes o ventas sin fecha (creadas pero no facturadas)
+    
     filtro_mes_actual_con_null = Q(fecha_factura__gte=primer_dia_mes) | Q(fecha_factura__isnull=True)
 
-    # 1) Ingresos del mes (sum valor_total)
+
     ventas_mes_actual = Venta.objects.filter(filtro_mes_actual_con_null)
     ingresos_mes = ventas_mes_actual.aggregate(total=Sum('valor_total'))['total'] or Decimal('0.00')
 
-    # 2) Productos vendidos en el mes (sum cantidad en la tabla intermedia)
-    # NOTA: en tu proyecto el FK en Venta_has_producto parece llamarse 'venta_idfactura' en otros puntos,
-    # por eso usamos venta_idfactura__fecha_factura aquí. Adáptalo si tu campo se llama distinto.
     productos_vendidos_mes = Venta_has_producto.objects.filter(
         Q(venta_idfactura__fecha_factura__gte=primer_dia_mes) | Q(venta_idfactura__fecha_factura__isnull=True)
     ).aggregate(total=Sum('cantidad'))['total'] or 0
 
-    # 3) Envios activos (excluir entregado/cancelado)
+
     envios_activos = Envio.objects.exclude(estado_envio__in=['entregado', 'cancelado']).count()
 
-    # 4) Ventas totales (suma del último año — lo dejas así o cambias a "suma total histórica")
     hace_un_anio = hoy - relativedelta(years=1)
     ventas_totales = Venta.objects.filter(fecha_factura__gte=hace_un_anio).aggregate(total=Sum('valor_total'))['total'] or Decimal('0.00')
 
     estadisticas_dashboard = {
         'ingresos_mes': ingresos_mes,
-        'ingresos_porcentaje': "50.5",   # si quieres calcular %, reemplaza con lógica real
+        'ingresos_porcentaje': "50.5",  
         'ventas_totales': ventas_totales,
         'ventas_porcentaje': "30.2",
         'productos_vendidos': productos_vendidos_mes,
@@ -95,11 +104,11 @@ def dashboard(request):
         'envios_activos': envios_activos,
     }
 
-    # VENTAS RECIENTES - obtener los últimos 10 (o 5). Usamos select_related para evitar N+1.
+   
     ventas_recientes = Venta.objects.select_related('usuarios_id_usuario') \
         .order_by('-fecha_factura', '-id')[:10]
 
-    # DATOS PARA LA GRAFICA - últimos N meses (agrupado por mes con TruncMonth)
+
     meses_a_mostrar = 6
     fecha_inicio_grafico = (hoy.replace(day=1) - relativedelta(months=meses_a_mostrar - 1))
     ventas_mensuales_qs = Venta.objects.filter(
@@ -111,32 +120,32 @@ def dashboard(request):
         total_ventas=Sum('valor_total')
     ).order_by('mes')
 
-    # Mapa mes -> total (usar clave año-mes para evitar ambigüedad)
+
     ventas_map = { item['mes'].strftime("%Y-%m"): float(item['total_ventas'] or 0) for item in ventas_mensuales_qs }
 
-    # Tratar locales (intentar español para abreviaciones de mes)
+  
     try:
         locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
     except locale.Error:
-        # si falla en el servidor, seguimos sin lanzar excepción
+ 
         pass
 
     grafico_ventas_labels = []
     grafico_ventas_data = []
     mes_actual = hoy.replace(day=1)
-    # generamos meses desde el más antiguo al actual
+
     for i in range(meses_a_mostrar - 1, -1, -1):
         mes_iterado = mes_actual - relativedelta(months=i)
         key = mes_iterado.strftime("%Y-%m")
-        label = mes_iterado.strftime("%b").capitalize()  # Ene, Feb, ...
+        label = mes_iterado.strftime("%b").capitalize() 
         grafico_ventas_labels.append(label)
         grafico_ventas_data.append(ventas_map.get(key, 0))
 
-    # Serializar para la plantilla (ya son listas, json.dumps produce arrays JS)
+
     estadisticas_dashboard['grafico_ventas_labels'] = json.dumps(grafico_ventas_labels, ensure_ascii=False)
     estadisticas_dashboard['grafico_ventas_data'] = json.dumps(grafico_ventas_data)
 
-    # También puedes enviar un historial (tabla) con paginación simple: últimas 10 ventas
+
     historial_ventas = Venta.objects.select_related('usuarios_id_usuario').order_by('-fecha_factura', '-id')[:10]
 
     context = {
@@ -212,10 +221,72 @@ def eliminar_categoria(request, id):
 #PRODUCTOS
 
 def list_producto(request):
+    
+
     producto = Producto.objects.select_related('categoria_idcategoria', 'proveedor_idproveedor').all()
-    data = {'producto': producto}
+    
+
+    lotes_disponibles = []
+    for p in producto:
+        nombre = p.nombre_producto.strip()
+        descripcion = p.descripcion_producto.strip()
+        nombre_completo = f"{nombre} {descripcion}" 
+        
+        lotes_disponibles.append({
+            'id': p.id, 
+            'nombre_producto_completo': nombre_completo, 
+            'codigo_barras': p.codigo_barras, 
+            'stock_actual': p.stock_actual, 
+            'fecha_vencimiento': p.fecha_vencimiento.strftime('%Y-%m-%d') if p.fecha_vencimiento else 'N/A'
+        })
+
+    lotes_json_string = json.dumps(lotes_disponibles)
+    lotes_json_safe = mark_safe(lotes_json_string) 
+    
+    
+ 
+    try:
+        historial_compras = Compra_proveedor.objects.select_related(
+        'producto_idproducto__proveedor_idproveedor', 
+        'usuarios_id_usuario'
+    ).all().order_by('-fecha_compra')[:10]
+    except:
+        print(f"Error en select_related de Compra_proveedor: {e}")
+    historial_compras = Compra_proveedor.objects.all().order_by('-fecha_compra')[:10]
+
+
+    try:
+        historial_salidas = Movimiento_inventario.objects.filter(
+            tipo_movimiento__in=['ajuste', 'venta']
+        ).order_by('-fecha_movimiento')[:15]
+    except:
+        historial_salidas = [] 
+
+    data = {
+        'producto': producto,
+        'lotes_json': lotes_json_safe,
+        'historial_compras': historial_compras,  
+        'historial_salidas': historial_salidas, 
+    }
+    
+
     return render(request, 'producto/index.html', data)
 
+
+def detalle_producto_modal(request, producto_id):
+    producto = get_object_or_404(Producto, pk=producto_id)
+    
+
+    movimientos_producto = Movimiento_inventario.objects.filter(
+        producto_idproducto=producto
+    ).order_by('-fecha_movimiento')[:5] 
+    
+    context = {
+        'p': producto,
+        'movimientos': movimientos_producto,
+    }
+ 
+    return render(request, 'producto/detalle_producto_modal_content.html', context)
 
 def registro_producto(request):
     if request.method == "POST":
@@ -364,6 +435,235 @@ def eliminar_producto(request, id):
     producto.delete()
     return redirect('list_producto')
 
+def generar_reporte_productos(request):
+    
+    categoria_id = request.GET.get('categoria')
+    stock_estado = request.GET.get('stock_estado')
+    formato = request.GET.get('formato')
+
+    productos_query = Producto.objects.all().order_by('nombre_producto')
+    
+    productos_query = productos_query.select_related('categoria_idcategoria')
+
+   
+    if categoria_id:
+    
+        if categoria_id.isdigit():
+            productos_query = productos_query.filter(categoria_idcategoria__id=categoria_id)
+
+    if stock_estado == 'bajo':
+       
+        productos_query = productos_query.filter(stock_actual__lte=F('stock_minimo'))
+        
+    elif stock_estado == 'vencido':
+       
+        fecha_limite = date.today() + timedelta(days=30)
+        productos_query = productos_query.filter(fecha_vencimiento__lte=fecha_limite).order_by('fecha_vencimiento')
+
+
+ 
+    if formato == 'excel':
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = 'attachment; filename="reporte_inventario_filtrado.xlsx"'
+
+        workbook = openpyxl.Workbook()
+        worksheet = workbook.active
+        worksheet.title = "Inventario Romar Natural"
+
+        
+        columns = [
+            'ID', 'Nombre', 'Descripción', 'Lote', 'Categoría', 
+            'Stock Actual', 'Stock Mínimo', 'Precio Venta', 'Vencimiento'
+        ]
+        
+       
+        row_num = 1
+        for col_num, column_title in enumerate(columns, 1):
+            cell = worksheet.cell(row=row_num, column=col_num)
+            cell.value = column_title
+            
+     
+        for producto in productos_query:
+            row_num += 1
+            row = [
+                producto.id,
+                producto.nombre_producto,
+                producto.descripcion_producto,
+                producto.codigo_barras,
+                producto.categoria_idcategoria.nombre_categoria if producto.categoria_idcategoria else 'Sin Categoría',
+                producto.stock_actual,
+                producto.stock_minimo,
+                producto.precio_venta,
+                producto.fecha_vencimiento.strftime("%Y-%m-%d") if producto.fecha_vencimiento else 'N/A'
+            ]
+            
+            for col_num, cell_value in enumerate(row, 1):
+                worksheet.cell(row=row_num, column=col_num, value=cell_value)
+        
+        workbook.save(response)
+        return response
+
+
+    elif formato == 'pdf':
+        
+       
+        response = HttpResponse(content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="reporte_inventario_filtrado.pdf"'
+
+       
+        doc = SimpleDocTemplate(response, pagesize=letter)
+        styles = getSampleStyleSheet()
+        story = [] 
+        story.append(Paragraph("<b>REPORTE DE INVENTARIO - ROMAR NATURAL</b>", styles['h1']))
+        story.append(Paragraph(f"Fecha del Reporte: {date.today().strftime('%Y-%m-%d')}", styles['Normal']))
+        
+        filtro_desc = "Todos los productos"
+        if stock_estado == 'bajo':
+            filtro_desc = "Productos con Stock Bajo/Mínimo"
+        elif stock_estado == 'vencido':
+            filtro_desc = "Productos Próximos a Vencer (30 días)"
+            
+        story.append(Paragraph(f"Filtro Aplicado: {filtro_desc}", styles['Normal']))
+        story.append(Paragraph("<br/>", styles['Normal'])) 
+        
+      
+        data = [
+            ['ID', 'Nombre Producto', 'Lote', 'Stock', 'Mínimo', 'Vencimiento', 'Categoría']
+        ]
+        
+        for producto in productos_query:
+            data.append([
+                producto.id,
+                f"{producto.nombre_producto} {producto.descripcion_producto}",
+                producto.codigo_barras,
+                producto.stock_actual,
+                producto.stock_minimo,
+                producto.fecha_vencimiento.strftime("%Y-%m-%d") if producto.fecha_vencimiento else 'N/A',
+                producto.categoria_idcategoria.nombre_categoria if producto.categoria_idcategoria else 'S/C'
+            ])
+
+        
+        if not data or len(data) == 1:
+            story.append(Paragraph("No se encontraron productos con los filtros seleccionados.", styles['Normal']))
+        else:
+            table = Table(data, colWidths=[40, 150, 80, 50, 50, 90, 100])
+            
+            
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.blue),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+              
+                ('BACKGROUND', (0, 0), (-1, -1), colors.white),
+            ]))
+            story.append(table)
+
+        
+        doc.build(story)
+        
+        return response
+        
+
+    return HttpResponse("Formato de reporte no válido.", status=400)
+
+
+def registrar_salida_inventario_ajuste(request):
+    if request.method == "POST":
+        
+        producto_id_lote = request.POST.get('producto_id_lote') 
+        codigo_barras_lote = request.POST.get('codigo_barras_hidden') 
+        cantidad_salida = request.POST.get('cantidad_salida')
+        motivo_salida = request.POST.get('motivo_salida')
+
+      
+        if not producto_id_lote or not producto_id_lote.isdigit():
+            print("Error: ID de lote no válido o faltante.")
+            return redirect('list_producto')
+
+        try:
+            cantidad = int(cantidad_salida)
+            
+            
+            producto = get_object_or_404(Producto, id=producto_id_lote)
+            
+            usuario = Usuarios.objects.get(id=request.user.id) 
+            
+            
+            print(f"DEBUG 1: LOTE={producto_id_lote}, CÓDIGO={producto.codigo_barras}, STOCK_INICIAL={producto.stock_actual}, CANTIDAD_A_RETIRAR={cantidad}")
+            
+        except ValueError:
+            print("Error: Cantidad inválida.")
+            return redirect('list_producto')
+        except Producto.DoesNotExist:
+            print("Error: El lote seleccionado no existe.")
+            return redirect('list_producto')
+        except Usuarios.DoesNotExist:
+        
+            print(f"Error de Usuarios: No se encontró la instancia de Usuarios con ID {request.user.id}.")
+            return redirect('list_producto')
+        except Exception as e:
+            
+            print(f"Error desconocido al obtener datos iniciales: {e}")
+            return redirect('list_producto')
+        
+        
+       
+        if cantidad <= 0 or cantidad > producto.stock_actual:
+            print(f"Error: Stock insuficiente. Stock actual del lote {producto.codigo_barras}: {producto.stock_actual}")
+            return redirect('list_producto') 
+        
+     
+        stock_anterior = producto.stock_actual
+        stock_nuevo = stock_anterior - cantidad
+        precio_unitario = producto.precio_compra 
+        valor_total = precio_unitario * cantidad
+
+       
+        try:
+            with transaction.atomic():
+                
+               
+                Producto.objects.filter(id=producto_id_lote).update(stock_actual=stock_nuevo)
+                
+                
+                producto_verificado = Producto.objects.get(id=producto_id_lote)
+                print(f"DEBUG POST-UPDATE: Stock verificado en DB: {producto_verificado.stock_actual}")
+              
+             
+                movimiento = Movimiento_inventario(
+                    producto_idproducto=producto, 
+                    usuarios_id_usuario=usuario, 
+                    
+                    tipo_movimiento='ajuste', 
+                    cantidad=cantidad,
+                    stock_anterior=stock_anterior,
+                    stock_nuevo=stock_nuevo, 
+                    precio_unitario=precio_unitario,
+                    valor_total=valor_total,
+                    
+                    referencia_id=0, 
+                    tipo_referencia='ajuste', 
+                    imagen_comprobante='',
+                    
+                    observaciones=f"AJUSTE POR BAJA/DEVOLUCIÓN. Motivo: {motivo_salida}. Lote Retirado (Código de Barras): {codigo_barras_lote}", 
+                )
+                movimiento.save()
+                
+            print(f"DEBUG: Ajuste exitoso y movimiento registrado. Nuevo stock: {stock_nuevo}")
+            return redirect('list_producto')
+            
+        except Exception as e:
+            print(f"ERROR FATAL (Rollback): Falló al registrar el ajuste de inventario. CAUSA: {e}")
+            return redirect('list_producto')
+
+    return redirect('list_producto')
+
+
 #VENTA DE PROVEEDOR
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
@@ -378,7 +678,7 @@ def crear_compra_proveedor(request, idproveedor):
     categorias = Categoria.objects.filter(activo=1)
 
     if request.method == "POST":
-        # 1. Recolección y Validación de Datos Comunes
+        
         tipo = request.POST.get("tipo_producto")
         estado = request.POST.get("estado_compra", "recibida")
         observaciones = request.POST.get("observaciones", "")
@@ -391,7 +691,7 @@ def crear_compra_proveedor(request, idproveedor):
             precio_unitario = Decimal(request.POST.get("valor_unitario") or "0")
         except:
             messages.error(request, "Error en el formato de la cantidad o el valor unitario.")
-            # Se debe regresar al mismo formulario para conservar los datos si es posible.
+         
             return redirect("listar_proveedores") 
 
         if cantidad <= 0 or precio_unitario <= Decimal('0'):
@@ -404,7 +704,7 @@ def crear_compra_proveedor(request, idproveedor):
 
         producto = None
         
-        # 2. PROCESAMIENTO DEL PRODUCTO (Nuevo o Existente)
+    
         if tipo == "nuevo":
             categoria_id = request.POST.get('categoria')
             nombre_producto = request.POST.get('nombre_producto')
@@ -414,19 +714,18 @@ def crear_compra_proveedor(request, idproveedor):
                  messages.error(request, "Nombre y Categoría son requeridos para el producto nuevo.")
                  return redirect("listar_proveedores")
             
-            # La fecha de vencimiento es opcional en la compra, pero si el producto es nuevo y es un campo obligatorio
-            # en el modelo Producto, se debe validar aquí o asegurarse de que el modelo permita null=True.
+           
             
             categoria_obj = get_object_or_404(Categoria, id=categoria_id)
             precio_venta = Decimal(precio_venta_post or '0')
 
-            # CÁLCULO DEL MARGEN AUTOMÁTICO
+            
             margen_calculado = Decimal('0.00')
             if precio_unitario > Decimal('0'):
                 margen_calculado = ((precio_venta - precio_unitario) / precio_unitario) * Decimal('100.00')
                 margen_calculado = margen_calculado.quantize(Decimal('0.01'))
 
-            # CREACIÓN DEL PRODUCTO NUEVO
+            
             producto = Producto.objects.create(
                 nombre_producto=nombre_producto,
                 descripcion_producto=request.POST.get('descripcion_producto', ''),
@@ -435,10 +734,10 @@ def crear_compra_proveedor(request, idproveedor):
                 precio_compra=precio_unitario,
                 precio_venta=precio_venta,
                 margen_ganancia=margen_calculado,
-                stock_actual=0, # Inicialmente 0
+                stock_actual=0, 
                 stock_minimo=int(request.POST.get('stock_minimo') or 1),
                 stock_maximo=int(request.POST.get('stock_maximo') or 1000),
-                fecha_vencimiento=fecha_vencimiento_detalle, # Usar la fecha del detalle
+                fecha_vencimiento=fecha_vencimiento_detalle, 
                 categoria_idcategoria=categoria_obj, 
                 proveedor_idproveedor=proveedor,
                 activo=1
@@ -478,7 +777,7 @@ def crear_compra_proveedor(request, idproveedor):
             fecha_vencimiento=fecha_vencimiento_detalle
         )
 
-       # ACTUALIZAR STOCK Y PRECIO DE COMPRA 
+       
         producto.stock_actual += cantidad
         producto.precio_compra = precio_unitario 
         

@@ -1,0 +1,47 @@
+<div class="row">
+    <div class="col-md-6">
+        <h6>Información General</h6>
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item"><b>Nombre:</b> {{ p.nombre_producto }}</li>
+            <li class="list-group-item"><b>Descripción:</b> {{ p.descripcion_producto }}</li>
+            <li class="list-group-item"><b>Lote/Cód. Barras:</b> {{ p.codigo_barras }}</li>
+            <li class="list-group-item"><b>Registro Sanitario:</b> {{ p.registrosaniario }}</li>
+            <li class="list-group-item"><b>Categoría:</b> {{ p.categoria_idcategoria.nombre_categoria }}</li>
+            <li class="list-group-item"><b>Proveedor:</b> {{ p.proveedor_idproveedor.nombre_proveedor }}</li>
+        </ul>
+    </div>
+    <div class="col-md-6">
+        <h6>Control de Stock y Precio</h6>
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item"><b>Stock Actual:</b> <b>{{ p.stock_actual }}</b></li>
+            <li class="list-group-item"><b>Stock Mínimo:</b> {{ p.stock_minimo }}</li>
+            <li class="list-group-item"><b>Stock Máximo:</b> {{ p.stock_maximo }}</li>
+            <li class="list-group-item"><b>Precio Compra:</b> ${{ p.precio_compra|floatformat:0 }}</li>
+            <li class="list-group-item"><b>Precio Venta:</b> ${{ p.precio_venta|floatformat:0 }}</li>
+            <li class="list-group-item"><b>Margen Ganancia:</b> {{ p.margen_ganancia }}%</li>
+        </ul>
+    </div>
+</div>
+<hr>
+<h6>Movimientos Recientes de Este Lote</h6>
+{% if movimientos %}
+<div class="table-responsive">
+    <table class="table table-sm table-striped">
+        <thead class="thead-dark">
+            <tr><th>Fecha</th><th>Tipo</th><th>Cantidad</th><th>Observación</th></tr>
+        </thead>
+        <tbody>
+        {% for mov in movimientos %}
+            <tr>
+                <td>{{ mov.fecha_movimiento|date:"Y-m-d H:i" }}</td>
+                <td><span class="badge badge-info">{{ mov.tipo_movimiento }}</span></td>
+                <td>{{ mov.cantidad }}</td>
+                <td>{{ mov.observaciones|truncatechars:30 }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="text-muted">No hay movimientos recientes registrados para este lote.</p>
+{% endif %}

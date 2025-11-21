@@ -169,10 +169,33 @@ def inicio_cat(request):
     return render(request, 'categoria/index.html')
 
 
+from django.core.paginator import Paginator
+from django.shortcuts import render
+from .models import Categoria
+
 def list_categoria(request):
-    categoria = Categoria.objects.all()
-    data = {'categoria': categoria}
-    return render(request, 'categoria/index.html', data)
+    search = request.GET.get('search', '')
+
+    categorias = Categoria.objects.all()
+
+    # Filtro por búsqueda
+    if search:
+        categorias = categorias.filter(
+            nombre_categoria__icontains=search
+        )
+
+    # Paginación (10 por página)
+    paginator = Paginator(categorias, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        'page_obj': page_obj,
+        'search': search,
+    }
+
+    return render(request, 'categoria/index.html', context)
+
 
 
 def registro_categoria(request):

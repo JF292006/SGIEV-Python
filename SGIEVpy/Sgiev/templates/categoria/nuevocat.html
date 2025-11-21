@@ -1,34 +1,76 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agregar Categoria</title>
-    <link rel="stylesheet" href="{% static 'css/styleform.css' %}">
-</head>
-<body>
+{% extends 'categoria/base_cat.html' %}
 
-    <div class="form-container">
-        <h2>Registro de Categoria</h2>
+{% block title %}Crear Categoría - Romar Natural{% endblock %}
 
-        <form action="{% url 'registro_categoria' %}" method="post">
-            {% csrf_token %}
-            <div class="form-group">
-                <label for="nombreCat">Nombre</label>
-                <input type="text" id="nombreCat" name="nombreCat" required>
-            </div>
-
-            <div class="form-group">
-                <label for="descCat">Descripción</label>
-                <input type="text" id="descCat" name="descCat" rows="2" required>
-            </div>
+{% block content %}
+<div class="container-fluid">
 
 
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="font-weight-bold">
+                <i class="icon ion-md-pricetags"></i> Crear Nueva Categoría
+            </h2>
 
-            <input type="submit" value="Registrar" class="btn-submit"></input>
-        </form>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb bg-transparent p-0">
+                    <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'list_categoria' %}">Categorías</a></li>
+                    <li class="breadcrumb-item active">Crear</li>
+                </ol>
+            </nav>
+        </div>
     </div>
 
-</body>
-</html>
+    <div class="row">
+        <div class="col-lg-8 offset-lg-2">
+
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="icon ion-md-document"></i> Formulario de Categoría
+                    </h5>
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+
+                        <!-- Información básica -->
+                        <h6 class="border-bottom pb-2 mb-3">Información de la Categoría</h6>
+
+                        <div class="form-group">
+                            <label for="nombreCat">Nombre *</label>
+                            <input type="text" id="nombreCat" name="nombreCat"
+                                   class="form-control"
+                                   required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="descCat">Descripción *</label>
+                            <textarea id="descCat" name="descCat"
+                                      class="form-control"
+                                      rows="3"
+                                      required></textarea>
+                        </div>
+
+                        <div class="form-group mt-4">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="icon ion-md-checkmark"></i> Guardar Categoría
+                            </button>
+                            <a href="{% url 'list_categoria' %}" class="btn btn-secondary">
+                                <i class="icon ion-md-close"></i> Cancelar
+                            </a>
+                        </div>
+
+                    </form>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+{% endblock %}

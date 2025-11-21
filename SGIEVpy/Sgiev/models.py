@@ -161,7 +161,7 @@ class Compra_proveedor(models.Model):
      observaciones_compra = models.TextField()
      imagen_factura_compra = models.CharField(max_length=255)
      usuarios_id_usuario = models.ForeignKey(Usuarios, on_delete=models.CASCADE)
-     producto_idproducto = models.ForeignKey(Producto, on_delete=models.CASCADE)
+     proveedor_idproveedor = models.ForeignKey(Proveedor, on_delete=models.CASCADE)
 
 class Compra_detalle(models.Model):
      compra_idcompra = models.ForeignKey(Compra_proveedor, on_delete=models.CASCADE)

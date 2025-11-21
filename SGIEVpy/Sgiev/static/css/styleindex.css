@@ -1,12 +1,12 @@
 :root {
     --primary: #3d862e;
     --primary-dark: #2d6621;
-    --light: #8cfaa7;
-    --grey: #ebb0b0;
+    --light: #e3ebe5;
+    --grey: #f5f5f5;
     --dark: #333333;
     --shadow: rgba(0, 0, 0, 0.1);
 }
-s
+
 * {
     margin: 0;
     padding: 0;

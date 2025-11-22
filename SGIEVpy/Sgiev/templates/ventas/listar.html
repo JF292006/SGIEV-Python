@@ -93,6 +93,7 @@
                             <th>Total</th>
                             <th>Estado</th>
                             <th>Método</th>
+                            <th class="text-center">Envío</th>
                             <th class="text-center">Acciones</th>
                         </tr>
                     </thead>
@@ -123,27 +124,66 @@
                             <td>
                                 <span class="badge badge-secondary">{{ venta.metodo_pago|title }}</span>
                             </td>
+                            
+                            <!-- Columna Estado de Envío -->
                             <td class="text-center">
-    <div class="btn-group" role="group">
-        <a href="{% url 'ventas_detalle' venta.id %}" class="btn btn-sm btn-info" title="Ver detalles">
-            <i class="icon ion-md-eye"></i>
-        </a>
-        
-        {% if es_admin %}
-        <a href="{% url 'ventas_eliminar' venta.id %}" 
-           class="btn btn-sm btn-danger" 
-           title="Eliminar venta"
-           onclick="return confirm('⚠️ ¿Está seguro de eliminar esta venta?\n\nFactura: {{ venta.numero_factura }}\nTotal: ${{ venta.valor_total|floatformat:0 }}\n\nEsta acción devolverá el stock al inventario y no se puede deshacer.')">
-            <i class="icon ion-md-trash"></i>
-        </a>
-        {% endif %}
-    </div>
-</td>
-
+                                {% if venta.envio_asociado %}
+                                    {% if venta.envio_asociado.estado_envio == 'pendiente' %}
+                                        <span class="badge badge-warning">Pendiente</span>
+                                    {% elif venta.envio_asociado.estado_envio == 'en_transito' %}
+                                        <span class="badge badge-info">En Tránsito</span>
+                                    {% elif venta.envio_asociado.estado_envio == 'entregado' %}
+                                        <span class="badge badge-success">Entregado</span>
+                                    {% else %}
+                                        <span class="badge badge-danger">Devuelto</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge badge-secondary">Sin Envío</span>
+                                {% endif %}
+                            </td>
+                            
+                            <!-- Columna Acciones -->
+                            <td class="text-center">
+                                <div class="btn-group" role="group">
+                                    <!-- Ver Detalles -->
+                                    <a href="{% url 'ventas_detalle' venta.id %}" 
+                                       class="btn btn-sm btn-info" 
+                                       title="Ver detalles">
+                                        <i class="icon ion-md-eye"></i>
+                                    </a>
+                                    
+                                    <!-- Botón de Envío Condicional -->
+                                    {% if venta.envio_asociado %}
+                                        <!-- Ya tiene envío: Mostrar ícono de bus -->
+                                        <a href="{% url 'envios_detalle' venta.envio_asociado.id %}" 
+                                           class="btn btn-sm btn-success" 
+                                           title="Ver envío - Estado: {{ venta.envio_asociado.estado_envio }}">
+                                            <i class="icon ion-md-bus"></i>
+                                        </a>
+                                    {% else %}
+                                        <!-- NO tiene envío: Mostrar alerta -->
+                                        <a href="{% url 'envios_crear' %}?venta_id={{ venta.id }}" 
+                                           class="btn btn-sm btn-warning" 
+                                           title="Crear envío para esta venta">
+                                            <i class="icon ion-md-alert"></i>
+                                        </a>
+                                    {% endif %}
+                                    
+                                    <!-- Eliminar (Solo Admin) -->
+                                    {% if es_admin %}
+                                    <a href="{% url 'ventas_eliminar' venta.id %}" 
+                                       class="btn btn-sm btn-danger" 
+                                       title="Eliminar venta"
+                                       onclick="return confirm('⚠️ ¿Está seguro de eliminar esta venta?\n\nFactura: {{ venta.numero_factura }}\nTotal: ${{ venta.valor_total|floatformat:0 }}\n\nEsta acción devolverá el stock al inventario y no se puede deshacer.')">
+                                        <i class="icon ion-md-trash"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="10" class="text-center py-4">
+                            <td colspan="11" class="text-center py-4">
                                 <i class="icon ion-md-alert" style="font-size: 3rem; color: #ccc;"></i>
                                 <p class="text-muted">
                                     {% if search or estado or metodo %}

@@ -3,6 +3,57 @@ from django.contrib.auth.hashers import make_password, check_password
 from .models import Usuarios, Venta, Producto, Venta_has_producto, Envio, Mensajeria, Proveedor
 from decimal import Decimal
 
+
+#------------envios
+class EnvioEditarOperarioForm(forms.ModelForm):
+    """
+    Formulario limitado para que operarios solo editen el estado
+    """
+    ESTADOS_ENVIO = [
+        ('pendiente', 'Pendiente'),
+        ('en_transito', 'En Tránsito'),
+        ('entregado', 'Entregado'),
+        ('devuelto', 'Devuelto')
+    ]
+    
+    estado_envio = forms.ChoiceField(
+        choices=ESTADOS_ENVIO,
+        widget=forms.Select(attrs={'class': 'form-control', 'required': 'required'}),
+        label='Estado del Envío'
+    )
+    
+    # Campo para novedades (opcional para operarios)
+    novedades = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'placeholder': 'Registre aquí cualquier novedad del envío',
+            'rows': 4
+        }),
+        label='Novedades'
+    )
+    
+    class Meta:
+        model = Envio
+        fields = ['estado_envio', 'novedades']
+
+    
+    # Campo para novedades (opcional para operarios)
+    novedades = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'placeholder': 'Registre aquí cualquier novedad del envío',
+            'rows': 4
+        }),
+        label='Novedades'
+    )
+    
+    class Meta:
+        model = Envio
+        fields = ['estado_envio', 'novedades']
+
+
 # ===== FORMULARIOS DE MENSAJERÍA =====
 
 class MensajeriaForm(forms.ModelForm):
@@ -84,23 +135,23 @@ class EnvioForm(forms.ModelForm):
         
         widgets = {
             'venta_idfactura': forms.Select(attrs={
-                'class': 'form-control select2',  # Agregamos clase select2
+                'class': 'form-control select2',
                 'required': 'required'
             }),
             'fk_mensajeria': forms.Select(attrs={
-                'class': 'form-control select2',  # Agregamos clase select2
+                'class': 'form-control select2',
                 'required': 'required'
             }),
             'fecha_envio': forms.DateInput(attrs={
                 'class': 'form-control',
                 'type': 'date',
                 'required': 'required'
-            }),
+            }, format='%Y-%m-%d'),  # Formato ISO
             'fecha_entrega': forms.DateInput(attrs={
                 'class': 'form-control',
                 'type': 'date',
                 'required': 'required'
-            }),
+            }, format='%Y-%m-%d'),  # Formato ISO
             'direccion_salida': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Dirección de origen',
@@ -139,7 +190,6 @@ class EnvioForm(forms.ModelForm):
         
         # Si estamos editando, permitir la venta actual
         if self.instance and self.instance.pk:
-            # Al editar, mostrar todas las ventas (incluyendo la actual)
             ventas_disponibles = Venta.objects.all().order_by('-fecha_factura')
         else:
             # Al crear, solo mostrar ventas SIN envío asociado
@@ -152,6 +202,13 @@ class EnvioForm(forms.ModelForm):
         # Personalizar display
         self.fields['venta_idfactura'].label_from_instance = lambda obj: f"{obj.numero_factura} - ${obj.valor_total:,.0f} - {obj.usuarios_id_usuario.nombre_completo}"
         self.fields['fk_mensajeria'].label_from_instance = lambda obj: f"{obj.nombre_mensajeria} - {obj.cobertura}"
+        
+        # IMPORTANTE: Convertir fechas al formato correcto para el widget
+        if self.instance and self.instance.pk:
+            if self.instance.fecha_envio:
+                self.initial['fecha_envio'] = self.instance.fecha_envio.strftime('%Y-%m-%d')
+            if self.instance.fecha_entrega:
+                self.initial['fecha_entrega'] = self.instance.fecha_entrega.strftime('%Y-%m-%d')
     
     def clean_venta_idfactura(self):
         """
@@ -159,12 +216,9 @@ class EnvioForm(forms.ModelForm):
         """
         venta = self.cleaned_data.get('venta_idfactura')
         
-        # Si estamos editando, permitir la venta actual
         if self.instance and self.instance.pk:
-            # Verificar si hay otro envío (que no sea este) con la misma venta
             envio_existente = Envio.objects.filter(venta_idfactura=venta).exclude(pk=self.instance.pk).exists()
         else:
-            # Al crear, verificar si ya existe un envío con esa venta
             envio_existente = Envio.objects.filter(venta_idfactura=venta).exists()
         
         if envio_existente:
@@ -174,6 +228,7 @@ class EnvioForm(forms.ModelForm):
             )
         
         return venta
+
 
 #form de las ventas 
 class EditarEstadoVentaForm(forms.ModelForm):
@@ -197,7 +252,7 @@ class EditarEstadoVentaForm(forms.ModelForm):
 
 class VentaForm(forms.ModelForm):
     """
-    Formulario para registrar ventas
+    Formulario para registrar ventas con validación de abono
     """
     class Meta:
         model = Venta
@@ -221,7 +276,8 @@ class VentaForm(forms.ModelForm):
                 'placeholder': '0',
                 'value': '0',
                 'step': '0.01',
-                'min': '0'
+                'min': '0',
+                'id': 'id_descuento'
             }),
             'metodo_pago': forms.Select(attrs={
                 'class': 'form-control',
@@ -229,14 +285,17 @@ class VentaForm(forms.ModelForm):
             }),
             'estado_pago': forms.Select(attrs={
                 'class': 'form-control',
-                'required': 'required'
+                'required': 'required',
+                'id': 'id_estado_pago',
+                'readonly': 'readonly'  # Se completará automáticamente
             }),
             'abono': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': '0',
                 'value': '0',
                 'step': '0.01',
-                'min': '0'
+                'min': '0',
+                'id': 'id_abono'
             }),
             'observaciones': forms.Textarea(attrs={
                 'class': 'form-control',
@@ -277,7 +336,7 @@ class AgregarProductoForm(forms.Form):
         queryset=Producto.objects.filter(activo=1, stock_actual__gt=0),
         label='Producto',
         widget=forms.Select(attrs={
-            'class': 'form-control',
+            'class': 'form-control select2-producto',  # Clase para Select2
             'required': 'required',
             'id': 'id_producto'
         })
@@ -297,8 +356,8 @@ class AgregarProductoForm(forms.Form):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Personalizar el display del producto
-        self.fields['producto'].label_from_instance = lambda obj: f"{obj.nombre_producto} - Stock: {obj.stock_actual} - ${obj.precio_venta}"
+        # Personalizar el display del producto para Select2
+        self.fields['producto'].label_from_instance = lambda obj: f"{obj.nombre_producto} - ${obj.precio_venta:,.0f} (Stock: {obj.stock_actual})"
     
     def clean(self):
         cleaned_data = super().clean()
@@ -313,49 +372,6 @@ class AgregarProductoForm(forms.Form):
         
         return cleaned_data
 
-class AgregarProductoForm(forms.Form):
-    """
-    Formulario para agregar productos al carrito
-    """
-    producto = forms.ModelChoiceField(
-        queryset=Producto.objects.filter(activo=1, stock_actual__gt=0),
-        label='Producto',
-        widget=forms.Select(attrs={
-            'class': 'form-control',
-            'required': 'required',
-            'id': 'id_producto'
-        })
-    )
-    
-    cantidad = forms.IntegerField(
-        label='Cantidad',
-        min_value=1,
-        widget=forms.NumberInput(attrs={
-            'class': 'form-control',
-            'placeholder': '1',
-            'value': '1',
-            'min': '1',
-            'id': 'id_cantidad'
-        })
-    )
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Personalizar el display del producto
-        self.fields['producto'].label_from_instance = lambda obj: f"{obj.nombre_producto} - Stock: {obj.stock_actual} - ${obj.precio_venta}"
-    
-    def clean(self):
-        cleaned_data = super().clean()
-        producto = cleaned_data.get('producto')
-        cantidad = cleaned_data.get('cantidad')
-        
-        if producto and cantidad:
-            if cantidad > producto.stock_actual:
-                raise forms.ValidationError(
-                    f'Stock insuficiente. Disponible: {producto.stock_actual} unidades'
-                )
-        
-        return cleaned_data
 
 class LoginForm(forms.Form):
     correo = forms.EmailField(

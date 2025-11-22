@@ -3,6 +3,10 @@
 {% block title %}Nueva Venta - Romar Natural{% endblock %}
 
 {% block extra_css %}
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap4-theme@1.5.2/dist/select2-bootstrap4.min.css" rel="stylesheet" />
+
 <style>
     .carrito-item {
         border-bottom: 1px solid #dee2e6;
@@ -22,6 +26,16 @@
         font-size: 1.5rem;
         font-weight: bold;
         color: var(--primary);
+    }
+    
+    /* Estilo para Select2 */
+    .select2-container--bootstrap4 .select2-selection {
+        height: calc(1.5em + .75rem + 2px) !important;
+    }
+    
+    #abono-info {
+        font-size: 0.85rem;
+        margin-top: 5px;
     }
 </style>
 {% endblock %}
@@ -62,6 +76,7 @@
                                 {% if producto_form.producto.errors %}
                                     <div class="text-danger small">{{ producto_form.producto.errors }}</div>
                                 {% endif %}
+                                <small class="text-muted">Escriba para buscar el producto</small>
                             </div>
                             <div class="col-md-2 form-group">
                                 <label>{{ producto_form.cantidad.label }}</label>
@@ -151,7 +166,7 @@
                         </div>
                         <div class="d-flex justify-content-between mb-2">
                             <span>IVA (19%):</span>
-                            <strong id="iva">${{ subtotal|floatformat:0|default:"0" }}</strong>
+                            <strong id="iva">$0</strong>
                         </div>
                         <hr>
                         <div class="d-flex justify-content-between">
@@ -179,7 +194,7 @@
                             <div class="form-group">
                                 <label>{{ venta_form.descuento.label }}</label>
                                 {{ venta_form.descuento }}
-                                <small class="text-muted">Ingrese el valor del descuento</small>
+                                <small class="text-muted">Valor del descuento</small>
                             </div>
 
                             <div class="form-group">
@@ -188,14 +203,17 @@
                             </div>
 
                             <div class="form-group">
-                                <label>{{ venta_form.estado_pago.label }}</label>
-                                {{ venta_form.estado_pago }}
+                                <label>{{ venta_form.abono.label }}</label>
+                                {{ venta_form.abono }}
+                                <div id="abono-info" class="text-muted">
+                                    <span id="abono-minimo-text"></span>
+                                </div>
                             </div>
 
                             <div class="form-group">
-                                <label>{{ venta_form.abono.label }}</label>
-                                {{ venta_form.abono }}
-                                <small class="text-muted">Abono inicial recibido</small>
+                                <label>{{ venta_form.estado_pago.label }} <span class="text-muted">(Automático)</span></label>
+                                {{ venta_form.estado_pago }}
+                                <small class="text-muted">Se calcula automáticamente según el abono</small>
                             </div>
 
                             <div class="form-group">
@@ -222,35 +240,85 @@
 {% endblock %}
 
 {% block extra_js %}
+<!-- Select2 JS -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
 <script>
-    // Calcular totales automáticamente
-    function calcularTotales() {
-        const subtotal = parseFloat({{ subtotal|default:"0" }});
-        const descuentoInput = document.getElementById('id_descuento');
-        const abonoInput = document.getElementById('id_abono');
-        
-        const descuento = parseFloat(descuentoInput.value) || 0;
-        const iva = (subtotal - descuento) * 0.19;
-        const total = subtotal - descuento + iva;
-        const abono = parseFloat(abonoInput.value) || 0;
-        const saldo = total - abono;
-        
-        document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-        document.getElementById('descuento').textContent = '$' + descuento.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-        document.getElementById('iva').textContent = '$' + iva.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-        document.getElementById('total').textContent = '$' + total.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    }
-    
-    // Actualizar al cambiar descuento o abono
-    document.addEventListener('DOMContentLoaded', function() {
-        const descuentoInput = document.getElementById('id_descuento');
-        const abonoInput = document.getElementById('id_abono');
-        
-        if (descuentoInput && abonoInput) {
-            descuentoInput.addEventListener('input', calcularTotales);
-            abonoInput.addEventListener('input', calcularTotales);
-            calcularTotales();
+$(document).ready(function() {
+    // Inicializar Select2 para búsqueda de productos
+    $('.select2-producto').select2({
+        theme: 'bootstrap4',
+        width: '100%',
+        placeholder: 'Buscar producto...',
+        allowClear: true,
+        language: {
+            noResults: function() {
+                return "No se encontraron productos";
+            },
+            searching: function() {
+                return "Buscando...";
+            },
+            inputTooShort: function() {
+                return "Escriba para buscar";
+            }
         }
     });
+});
+
+// Calcular totales y estado automáticamente
+function calcularTotales() {
+    const subtotal = parseFloat({{ subtotal|default:"0" }});
+    const descuentoInput = document.getElementById('id_descuento');
+    const abonoInput = document.getElementById('id_abono');
+    const estadoPagoSelect = document.getElementById('id_estado_pago');
+    const abonoMinimoText = document.getElementById('abono-minimo-text');
+    
+    const descuento = parseFloat(descuentoInput.value) || 0;
+    const iva = (subtotal - descuento) * 0.19;
+    const total = subtotal - descuento + iva;
+    const abono = parseFloat(abonoInput.value) || 0;
+    
+    // Calcular abono mínimo (10%)
+    const abonoMinimo = total * 0.10;
+    
+    // Actualizar texto de abono mínimo
+    if (abono > 0 && abono < total) {
+        abonoMinimoText.innerHTML = `Mínimo: <strong>$${abonoMinimo.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}</strong> (10%)`;
+        abonoMinimoText.className = 'text-info';
+    } else {
+        abonoMinimoText.innerHTML = '';
+    }
+    
+    // Calcular estado de pago automáticamente
+    let estadoPago = 'pendiente';
+    if (abono == 0) {
+        estadoPago = 'pendiente';
+    } else if (abono >= total) {
+        estadoPago = 'pagado';
+    } else if (abono >= abonoMinimo) {
+        estadoPago = 'parcial';
+    }
+    
+    // Actualizar select de estado
+    estadoPagoSelect.value = estadoPago;
+    
+    // Actualizar visualización de totales
+    document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    document.getElementById('descuento').textContent = '$' + descuento.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    document.getElementById('iva').textContent = '$' + iva.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    document.getElementById('total').textContent = '$' + total.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+// Actualizar al cambiar valores
+document.addEventListener('DOMContentLoaded', function() {
+    const descuentoInput = document.getElementById('id_descuento');
+    const abonoInput = document.getElementById('id_abono');
+    
+    if (descuentoInput && abonoInput) {
+        descuentoInput.addEventListener('input', calcularTotales);
+        abonoInput.addEventListener('input', calcularTotales);
+        calcularTotales();
+    }
+});
 </script>
 {% endblock %}

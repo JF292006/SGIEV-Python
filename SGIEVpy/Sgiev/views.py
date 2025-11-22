@@ -20,7 +20,7 @@ from .models import (
     Compra_proveedor,
     Compra_detalle
 )
-from .forms import LoginForm, UsuarioForm, VentaForm, AgregarProductoForm,EditarEstadoVentaForm,EnvioForm, MensajeriaForm
+from .forms import LoginForm, UsuarioForm, VentaForm, AgregarProductoForm,EditarEstadoVentaForm,EnvioForm, MensajeriaForm,EnvioEditarOperarioForm
 from .decorators import admin_required
 import json
 from django.utils.safestring import mark_safe
@@ -42,7 +42,11 @@ from django.urls import reverse
 from django.utils import timezone
 from django.db import transaction
 from uuid import uuid4
-
+from django.db.models import Sum, Count, Q, F
+from django.utils import timezone
+from datetime import datetime, date, timedelta
+from decimal import Decimal
+import json
 
 def index(request):  
     """
@@ -61,107 +65,179 @@ def login(request):
 def admin(request):
     return render(request, 'admin.html')
 
-
-
-# DASHBOARD 
-from django.db.models.functions import TruncMonth
-from django.db.models import Count, Sum, Q
-from datetime import date
-from decimal import Decimal
-import json
-from dateutil.relativedelta import relativedelta
-import locale
-
-from django.contrib.auth.decorators import login_required
-
-
-@login_required
-def dashboard(request):
-    usuario = request.user.usuarios
-    es_admin = (usuario.tipo_usu == 'administrador')
-    hoy = date.today()
-    primer_dia_mes = hoy.replace(day=1)
-
+#dashboard
+@login_required(login_url='login')
+def dashboard_view(request):
+    """
+    Vista principal del dashboard con estadísticas reales
+    """
+    from django.db.models import Sum, Count
+    from django.utils import timezone
+    from datetime import timedelta
+    import json
     
-    filtro_mes_actual_con_null = Q(fecha_factura__gte=primer_dia_mes) | Q(fecha_factura__isnull=True)
-
-
-    ventas_mes_actual = Venta.objects.filter(filtro_mes_actual_con_null)
-    ingresos_mes = ventas_mes_actual.aggregate(total=Sum('valor_total'))['total'] or Decimal('0.00')
-
-    productos_vendidos_mes = Venta_has_producto.objects.filter(
-        Q(venta_idfactura__fecha_factura__gte=primer_dia_mes) | Q(venta_idfactura__fecha_factura__isnull=True)
-    ).aggregate(total=Sum('cantidad'))['total'] or 0
-
-
-    envios_activos = Envio.objects.exclude(estado_envio__in=['entregado', 'cancelado']).count()
-
-    hace_un_anio = hoy - relativedelta(years=1)
-    ventas_totales = Venta.objects.filter(fecha_factura__gte=hace_un_anio).aggregate(total=Sum('valor_total'))['total'] or Decimal('0.00')
-
-    estadisticas_dashboard = {
-        'ingresos_mes': ingresos_mes,
-        'ingresos_porcentaje': "50.5",  
-        'ventas_totales': ventas_totales,
-        'ventas_porcentaje': "30.2",
-        'productos_vendidos': productos_vendidos_mes,
-        'productos_porcentaje': "15.8",
-        'envios_activos': envios_activos,
-    }
-
-   
-    ventas_recientes = Venta.objects.select_related('usuarios_id_usuario') \
-        .order_by('-fecha_factura', '-id')[:10]
-
-
-    meses_a_mostrar = 6
-    fecha_inicio_grafico = (hoy.replace(day=1) - relativedelta(months=meses_a_mostrar - 1))
-    ventas_mensuales_qs = Venta.objects.filter(
-        fecha_factura__gte=fecha_inicio_grafico,
-        fecha_factura__isnull=False
-    ).annotate(
-        mes=TruncMonth('fecha_factura')
-    ).values('mes').annotate(
-        total_ventas=Sum('valor_total')
-    ).order_by('mes')
-
-
-    ventas_map = { item['mes'].strftime("%Y-%m"): float(item['total_ventas'] or 0) for item in ventas_mensuales_qs }
-
-  
+    usuario = request.user
+    es_admin = usuario.tipo_usu == 'administrador'
+    
+    # Fecha actual y rango del mes
+    hoy = timezone.now()
+    inicio_mes = hoy.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # ===== FILTRAR DATOS SEGÚN EL ROL =====
+    if es_admin:
+        ventas_query = Venta.objects.all()
+        envios_query = Envio.objects.all()
+    else:
+        ventas_query = Venta.objects.filter(usuarios_id_usuario=usuario)
+        envios_query = Envio.objects.filter(usuarios_id_usuario=usuario)
+    
+    # ===== ESTADÍSTICAS DE VENTAS =====
+    
+    # Ingresos del mes actual
+    ventas_mes = ventas_query.filter(
+        fecha_factura__gte=inicio_mes,
+        estado_pago__in=['pagado', 'parcial']
+    )
+    
+    ingresos_mes = ventas_mes.aggregate(total=Sum('valor_total'))['total'] or Decimal('0')
+    
+    # Ventas totales (histórico)
+    ventas_totales = ventas_query.filter(
+        estado_pago__in=['pagado', 'parcial']
+    ).aggregate(total=Sum('valor_total'))['total'] or Decimal('0')
+    
+    # Productos vendidos (cantidad total de items)
     try:
-        locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
-    except locale.Error:
- 
-        pass
-
-    grafico_ventas_labels = []
-    grafico_ventas_data = []
-    mes_actual = hoy.replace(day=1)
-
-    for i in range(meses_a_mostrar - 1, -1, -1):
-        mes_iterado = mes_actual - relativedelta(months=i)
-        key = mes_iterado.strftime("%Y-%m")
-        label = mes_iterado.strftime("%b").capitalize() 
-        grafico_ventas_labels.append(label)
-        grafico_ventas_data.append(ventas_map.get(key, 0))
-
-
-    estadisticas_dashboard['grafico_ventas_labels'] = json.dumps(grafico_ventas_labels, ensure_ascii=False)
-    estadisticas_dashboard['grafico_ventas_data'] = json.dumps(grafico_ventas_data)
-
-
-    historial_ventas = Venta.objects.select_related('usuarios_id_usuario').order_by('-fecha_factura', '-id')[:10]
-
+        productos_vendidos = Venta_has_producto.objects.filter(
+            venta_idfactura__in=ventas_query,
+            venta_idfactura__fecha_factura__gte=inicio_mes
+        ).aggregate(total=Sum('cantidad'))['total'] or 0
+    except Exception as e:
+        productos_vendidos = 0
+    
+    # ===== ESTADÍSTICAS DE ENVÍOS =====
+    
+    # Envíos pendientes
+    envios_pendientes = envios_query.filter(estado_envio='pendiente').count()
+    
+    # Envíos en tránsito
+    envios_transito = envios_query.filter(estado_envio='en_transito').count()
+    
+    # Envíos entregados este mes
+    envios_entregados_mes = envios_query.filter(
+        estado_envio='entregado',
+        fecha_entrega__gte=inicio_mes
+    ).count()
+    
+    # Envíos devueltos este mes (AGREGAR ESTO)
+    envios_devueltos_mes = envios_query.filter(
+        estado_envio='devuelto',
+        fecha_entrega__gte=inicio_mes
+    ).count()
+    
+    # Últimos envíos entregados (AGREGAR ESTO)
+    envios_entregados_recientes = envios_query.filter(
+        estado_envio='entregado'
+    ).select_related('venta_idfactura', 'fk_mensajeria').order_by('-fecha_entrega')[:5]
+    
+    # ===== ALERTAS DE INVENTARIO (SOLO ADMIN) =====
+    
+    if es_admin:
+        productos_stock_bajo = Producto.objects.filter(
+            activo=1,
+            stock_actual__lte=models.F('stock_minimo')
+        ).order_by('stock_actual')[:10]
+    else:
+        productos_stock_bajo = []
+    
+    # ===== ÚLTIMAS VENTAS =====
+    
+    ventas_recientes = list(ventas_query.order_by('-fecha_factura')[:5])
+    historial_ventas = list(ventas_query.order_by('-fecha_factura')[:10])
+    
+    # ===== DATOS PARA EL GRÁFICO =====
+    
+    meses_labels = []
+    meses_valores = []
+    
+    meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+    
+    for i in range(5, -1, -1):
+        fecha_mes = hoy - timedelta(days=30 * i)
+        inicio = fecha_mes.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        if i == 0:
+            fin = hoy
+        else:
+            siguiente_mes = inicio + timedelta(days=32)
+            fin = siguiente_mes.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        total_mes = ventas_query.filter(
+            fecha_factura__gte=inicio,
+            fecha_factura__lt=fin,
+            estado_pago__in=['pagado', 'parcial']
+        ).aggregate(total=Sum('valor_total'))['total'] or Decimal('0')
+        
+        mes_nombre = meses[fecha_mes.month - 1]
+        meses_labels.append(mes_nombre)
+        meses_valores.append(float(total_mes))
+    
+    # ===== PORCENTAJES =====
+    
+    inicio_mes_anterior = (inicio_mes - timedelta(days=1)).replace(day=1)
+    ventas_mes_anterior = ventas_query.filter(
+        fecha_factura__gte=inicio_mes_anterior,
+        fecha_factura__lt=inicio_mes,
+        estado_pago__in=['pagado', 'parcial']
+    ).aggregate(total=Sum('valor_total'))['total'] or Decimal('0')
+    
+    if ventas_mes_anterior > 0:
+        ingresos_porcentaje = round(((ingresos_mes - ventas_mes_anterior) / ventas_mes_anterior) * 100, 1)
+    else:
+        ingresos_porcentaje = 100 if ingresos_mes > 0 else 0
+    
+    # ===== ENVÍOS PRÓXIMOS =====
+    
+    envios_proximos = list(envios_query.filter(
+        estado_envio='en_transito',
+        fecha_entrega__lte=hoy + timedelta(days=3)
+    ).order_by('fecha_entrega')[:5])
+    
+    # ===== CONTEXTO =====
+    
     context = {
         'usuario': usuario,
         'es_admin': es_admin,
-        'estadisticas_dashboard': estadisticas_dashboard,
+        
+        # Estadísticas principales
+        'estadisticas_dashboard': {
+            'ingresos_mes': ingresos_mes,
+            'ingresos_porcentaje': abs(ingresos_porcentaje),
+            'ingresos_crecimiento': ingresos_porcentaje >= 0,
+            'ventas_totales': ventas_totales,
+            'productos_vendidos': productos_vendidos,
+            'envios_pendientes': envios_pendientes,
+            'envios_transito': envios_transito,
+            'envios_entregados': envios_entregados_mes,
+            'envios_devueltos': envios_devueltos_mes,
+        },
+        
+        # Ventas
         'ventas_recientes': ventas_recientes,
         'historial_ventas': historial_ventas,
+        
+        # Gráfico
+        'grafico_labels': json.dumps(meses_labels),
+        'grafico_valores': json.dumps(meses_valores),
+        
+        # Alertas
+        'productos_stock_bajo': productos_stock_bajo,
+        'envios_proximos': envios_proximos,
+        'envios_entregados_recientes': list(envios_entregados_recientes),
+        'tiene_alertas': len(productos_stock_bajo) > 0 or envios_pendientes > 0,
     }
+    
     return render(request, 'dashboard.html', context)
-
 
 # CATEGORIA
 
@@ -1320,19 +1396,6 @@ def logout_view(request):
     return redirect('index')
 
 
-@login_required(login_url='login')
-def dashboard_view(request):
-    """
-    Vista principal del dashboard
-    """
-    context = {
-        'usuario': request.user,
-        'es_admin': request.user.tipo_usu == 'administrador',
-        'es_operario': request.user.tipo_usu == 'operario'
-    }
-    return render(request, 'dashboard.html', context)
-
-
 # ===== VISTAS DE USUARIOS (CRUD) =====
 
 @admin_required
@@ -1453,7 +1516,6 @@ def usuarios_detalle(request, id):
 
 
 # ===== VISTAS DE VENTAS =====
-
 @login_required(login_url='login')
 def ventas_listar(request):
     """
@@ -1469,10 +1531,10 @@ def ventas_listar(request):
     # Query base según el rol
     if request.user.tipo_usu == 'administrador':
         # Admin ve todas las ventas
-        ventas = Venta.objects.all().order_by('-fecha_factura')
+        ventas = Venta.objects.all().select_related('usuarios_id_usuario').order_by('-fecha_factura')
     else:
         # Operario solo ve sus ventas
-        ventas = Venta.objects.filter(usuarios_id_usuario=request.user).order_by('-fecha_factura')
+        ventas = Venta.objects.filter(usuarios_id_usuario=request.user).select_related('usuarios_id_usuario').order_by('-fecha_factura')
     
     # Aplicar filtros
     if search:
@@ -1488,10 +1550,24 @@ def ventas_listar(request):
     if metodo:
         ventas = ventas.filter(metodo_pago=metodo)
     
-    # Paginación - CAMBIAR A 10 REGISTROS
-    paginator = Paginator(ventas, 10)  # Cambiar de 15 a 10
+    # Paginación
+    paginator = Paginator(ventas, 10)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
+    
+    # ===== AGREGAR INFORMACIÓN DE ENVÍOS PARA CADA VENTA =====
+    # Crear un diccionario con los envíos asociados a cada venta
+    ventas_ids = [venta.id for venta in page_obj]
+    envios_dict = {}
+    
+    if ventas_ids:
+        envios = Envio.objects.filter(venta_idfactura__in=ventas_ids).select_related('venta_idfactura')
+        for envio in envios:
+            envios_dict[envio.venta_idfactura.id] = envio
+    
+    # Agregar el envío a cada venta en el page_obj
+    for venta in page_obj:
+        venta.envio_asociado = envios_dict.get(venta.id, None)
     
     context = {
         'page_obj': page_obj,
@@ -1503,7 +1579,6 @@ def ventas_listar(request):
     }
     
     return render(request, 'ventas/listar.html', context)
-
 
 @login_required(login_url='login')
 def ventas_crear(request):
@@ -1618,11 +1693,10 @@ def ventas_limpiar_carrito(request):
     messages.success(request, 'Carrito vaciado')
     return redirect('ventas_crear')
 
-
 @transaction.atomic
 def procesar_venta(request):
     """
-    Procesa la venta final: crea la venta, descuenta inventario y registra movimientos
+    Procesa la venta final con validación de abono mínimo y estado automático
     """
     venta_form = VentaForm(request.POST)
     carrito = request.session.get('carrito_venta', [])
@@ -1636,9 +1710,30 @@ def procesar_venta(request):
             # Calcular totales
             subtotal = sum(Decimal(str(item['subtotal'])) for item in carrito)
             descuento = venta_form.cleaned_data['descuento'] or Decimal('0')
-            iva = (subtotal - descuento) * Decimal('0.19')  # IVA 19%
+            iva = (subtotal - descuento) * Decimal('0.19')
             valor_total = subtotal - descuento + iva
             abono = venta_form.cleaned_data['abono'] or Decimal('0')
+            
+            # ===== VALIDACIÓN DE ABONO MÍNIMO =====
+            abono_minimo = valor_total * Decimal('0.10')  # 10% del total
+            
+            if abono > 0 and abono < abono_minimo:
+                messages.error(
+                    request, 
+                    f'El abono mínimo debe ser el 10% del total (${abono_minimo:,.0f}). '
+                    f'Si no desea abonar, deje el campo en 0.'
+                )
+                return redirect('ventas_crear')
+            
+            # ===== CALCULAR ESTADO DE PAGO AUTOMÁTICAMENTE =====
+            if abono == 0:
+                estado_pago = 'pendiente'
+            elif abono >= valor_total:
+                estado_pago = 'pagado'
+                abono = valor_total  # Ajustar si pagó de más
+            else:
+                estado_pago = 'parcial'
+            
             saldo_pendiente = valor_total - abono
             
             # Crear venta
@@ -1646,7 +1741,9 @@ def procesar_venta(request):
             venta.subtotal = subtotal
             venta.iva = iva
             venta.valor_total = valor_total
+            venta.abono = abono
             venta.saldo_pendiente = saldo_pendiente
+            venta.estado_pago = estado_pago  # Estado automático
             venta.usuarios_id_usuario = request.user
             venta.imagen_recibo = ''
             venta.save()
@@ -1659,7 +1756,6 @@ def procesar_venta(request):
                 producto = Producto.objects.get(id=item['producto_id'])
                 cantidad = item['cantidad']
                 
-                # Verificar stock nuevamente
                 if producto.stock_actual < cantidad:
                     raise Exception(f'Stock insuficiente para {producto.nombre_producto}')
                 
@@ -1677,7 +1773,7 @@ def procesar_venta(request):
                 producto.stock_actual -= cantidad
                 producto.save()
                 
-                # VERIFICAR STOCK BAJO DESPUÉS DE LA VENTA
+                # Verificar stock bajo
                 if producto.stock_actual <= producto.stock_minimo:
                     productos_stock_bajo.append({
                         'nombre': producto.nombre_producto,
@@ -1705,8 +1801,17 @@ def procesar_venta(request):
             request.session['carrito_venta'] = []
             request.session.modified = True
             
-            # Mensajes de éxito y alertas
-            messages.success(request, f'Venta {venta.numero_factura} registrada exitosamente')
+            # Mensajes de éxito
+            estado_texto = {
+                'pendiente': 'PENDIENTE',
+                'parcial': 'PARCIAL',
+                'pagado': 'PAGADO'
+            }
+            messages.success(
+                request, 
+                f'Venta {venta.numero_factura} registrada exitosamente. '
+                f'Estado: {estado_texto[estado_pago]}'
+            )
             
             # Alertar sobre productos con stock bajo
             if productos_stock_bajo:
@@ -2065,17 +2170,21 @@ def envios_listar(request):
     """
     Lista todos los envíos
     Admin: ve todos | Operario: ve los suyos
+    + Muestra ventas sin envío asignado
     """
     search = request.GET.get('search', '')
     estado = request.GET.get('estado', '')
+    search_pendientes = request.GET.get('search_pendientes', '')
     
     # Filtrar según rol
     if request.user.tipo_usu == 'administrador':
         envios = Envio.objects.all().order_by('-fecha_envio')
+        ventas_query = Venta.objects.all()
     else:
         envios = Envio.objects.filter(usuarios_id_usuario=request.user).order_by('-fecha_envio')
+        ventas_query = Venta.objects.filter(usuarios_id_usuario=request.user)
     
-    # Aplicar filtros
+    # Aplicar filtros a envíos
     if search:
         envios = envios.filter(
             models.Q(venta_idfactura__numero_factura__icontains=search) |
@@ -2086,14 +2195,31 @@ def envios_listar(request):
     if estado:
         envios = envios.filter(estado_envio=estado)
     
+    # Paginación de envíos
     paginator = Paginator(envios, 10)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
+    
+    # ===== OBTENER VENTAS SIN ENVÍO ASIGNADO =====
+    ventas_con_envio = Envio.objects.values_list('venta_idfactura', flat=True)
+    ventas_sin_envio = ventas_query.exclude(id__in=ventas_con_envio).select_related('usuarios_id_usuario').order_by('-fecha_factura')
+    
+    # Filtrar ventas pendientes si hay búsqueda
+    if search_pendientes:
+        ventas_sin_envio = ventas_sin_envio.filter(numero_factura__icontains=search_pendientes)
+    
+    # Paginación de ventas sin envío
+    paginator_pendientes = Paginator(ventas_sin_envio, 5)
+    page_pendientes = request.GET.get('page_pendientes')
+    ventas_pendientes_obj = paginator_pendientes.get_page(page_pendientes)
     
     context = {
         'page_obj': page_obj,
         'search': search,
         'estado': estado,
+        'ventas_pendientes_obj': ventas_pendientes_obj,
+        'search_pendientes': search_pendientes,
+        'total_pendientes': ventas_sin_envio.count(),
         'usuario': request.user,
         'es_admin': request.user.tipo_usu == 'administrador'
     }
@@ -2101,21 +2227,39 @@ def envios_listar(request):
     return render(request, 'envios/listar.html', context)
 
 
+
 @login_required(login_url='login')
 def envios_crear(request):
     """
     Crear nuevo envío
     """
+    # Obtener venta_id si viene por parámetro GET
+    venta_id = request.GET.get('venta_id', None)
+    
     if request.method == 'POST':
         form = EnvioForm(request.POST)
         if form.is_valid():
             envio = form.save(commit=False)
             envio.usuarios_id_usuario = request.user
             envio.save()
-            messages.success(request, f'Envío registrado exitosamente')
+            messages.success(request, f'Envío registrado exitosamente para la venta {envio.venta_idfactura.numero_factura}')
             return redirect('envios_detalle', id=envio.id)
     else:
-        form = EnvioForm()
+        # Si viene venta_id, preseleccionar esa venta en el formulario
+        if venta_id:
+            try:
+                venta = Venta.objects.get(id=venta_id)
+                # Verificar que no tenga envío ya asociado
+                if Envio.objects.filter(venta_idfactura=venta).exists():
+                    messages.warning(request, f'La venta {venta.numero_factura} ya tiene un envío asociado.')
+                    return redirect('ventas_listar')
+                
+                form = EnvioForm(initial={'venta_idfactura': venta})
+            except Venta.DoesNotExist:
+                messages.error(request, 'Venta no encontrada')
+                form = EnvioForm()
+        else:
+            form = EnvioForm()
     
     context = {
         'form': form,
@@ -2131,28 +2275,40 @@ def envios_crear(request):
 def envios_editar(request, id):
     """
     Editar envío existente
+    Admin: puede editar todo
+    Operario: solo puede editar estado y novedades
     """
     envio = get_object_or_404(Envio, pk=id)
+    es_admin = request.user.tipo_usu == 'administrador'
     
     if request.method == 'POST':
-        form = EnvioForm(request.POST, instance=envio)  # ← instance=envio es crucial
+        # Usar formulario según el rol
+        if es_admin:
+            form = EnvioForm(request.POST, instance=envio)
+        else:
+            form = EnvioEditarOperarioForm(request.POST, instance=envio)
+        
         if form.is_valid():
             form.save()
             messages.success(request, 'Envío actualizado exitosamente')
             return redirect('envios_detalle', id=envio.id)
     else:
-        form = EnvioForm(instance=envio)  # ← instance=envio autocompleta
+        # Cargar formulario según el rol CON DATOS EXISTENTES
+        if es_admin:
+            form = EnvioForm(instance=envio)  # Formulario completo con todos los datos
+        else:
+            form = EnvioEditarOperarioForm(instance=envio)  # Formulario limitado
     
     context = {
         'form': form,
         'titulo': 'Editar Envío',
         'envio': envio,
         'usuario': request.user,
-        'es_admin': request.user.tipo_usu == 'administrador'
+        'es_admin': es_admin,
+        'solo_estado': not es_admin  # Variable para el template
     }
     
     return render(request, 'envios/editar.html', context)
-
 
 @admin_required
 def envios_eliminar(request, id):

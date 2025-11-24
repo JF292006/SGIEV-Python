@@ -144,6 +144,7 @@
             margin-top: 5px;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
     <div class="login-container">
@@ -192,5 +193,20 @@
             <a href="{% url 'index' %}">← Volver al inicio</a>
         </div>
     </div>
+
+{% if login_ok %}
+<script>
+Swal.fire({
+    title: "¡Sesión iniciada!",
+    text: "Serás redirigido en breve...",
+    icon: "success",
+    timer: 1800,
+    showConfirmButton: false
+}).then(() => {
+    window.location.href = "{% url 'dashboard' %}";
+});
+</script>
+{% endif %}
+  
 </body>
 </html>

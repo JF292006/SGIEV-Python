@@ -298,37 +298,45 @@ def registro_categoria(request):
         return redirect('list_categoria')
 
 
-    usuario = request.user                     # <-- usuario logueado
-    es_admin = request.user.tipo_usu == 'administrador'  # <-- bandera del rol
+    usuario = request.user   
+    es_admin = request.user.tipo_usu == 'administrador'  
 
     return render(request, 'categoria/nuevocat.html', {
-        'usuario': usuario,      # <-- añadido para badge
-        'es_admin': es_admin     # <-- añadido para badge
+        'usuario': usuario,     
+        'es_admin': es_admin    
     })
 
 
 def pre_editar_categoria(request, id):
     categoria = Categoria.objects.get(id=id)
+
+
+    usuario = request.user
+    es_admin = request.user.tipo_usu == 'administrador'
+
     data = {
-        'categoria': categoria
+        'categoria': categoria,
+        'usuario': usuario,   
+        'es_admin': es_admin  
     }
+
     return render(request, 'categoria/editarcat.html', data)
 
 
+
 def editar_categoria(request, id):
+    categoria = Categoria.objects.get(id=id)
+
     if request.method == "POST":
-        categoria = Categoria.objects.get(id=id)
-
-        nombre = request.POST.get('nombreCat')
-        descripcion = request.POST.get('descCat')
-        estado = request.POST.get('estadoCat')
-
-        categoria.nombre_categoria = nombre
-        categoria.descripcion_categoria = descripcion
-        categoria.activo = estado
-
+        categoria.nombre_categoria = request.POST.get('nombreCat')
+        categoria.descripcion_categoria = request.POST.get('descCat')
+        categoria.activo = request.POST.get('estadoCat')
         categoria.save()
-    return redirect("categoria/index")
+
+        return redirect("list_categoria")
+
+    return redirect("list_categoria")
+
 
 
 def eliminar_categoria(request, id):
@@ -1302,17 +1310,21 @@ def listar_compras_proveedor(request):
 
 #PROVEEDOR
 
+
+@login_required
 def listar_proveedores(request):
-    usuario = request.user  # este es el usuario logueado
+    usuario = request.user 
 
     proveedores = Proveedor.objects.all()
+    es_admin = usuario.tipo_usu == 'administrador'  
     return render(request, 'proveedor/listar_prov.html', {
         'proveedores': proveedores,
-        'usuario': usuario
+        'usuario': usuario,
+        'es_admin': es_admin
     })
 
 
-@admin_required
+@login_required
 def registrar_proveedor(request):
     # ⬇️ Se obtiene el usuario logueado para poder mostrar su info en la plantilla
     usuario = request.user  
@@ -1355,7 +1367,7 @@ def registrar_proveedor(request):
     })
 
 
-@admin_required
+@login_required
 def editar_proveedor(request, id):
     proveedor = get_object_or_404(Proveedor, id=id)
 
@@ -1381,7 +1393,7 @@ def editar_proveedor(request, id):
     })
 
 
-@admin_required
+@login_required
 def eliminar_proveedor(request, id):
     proveedor = get_object_or_404(Proveedor, id=id)
     proveedor.delete()
@@ -1397,6 +1409,8 @@ def login_view(request):
     if request.user.is_authenticated:
         return redirect('dashboard')
     
+    login_ok = False  # <-- FLAG para SweetAlert
+
     if request.method == 'POST':
         form = LoginForm(request.POST)
         if form.is_valid():
@@ -1412,17 +1426,15 @@ def login_view(request):
                 request.session['_auth_user_backend'] = 'Sgiev.backends.UsuariosBackend'
                 request.session.save()
                 
-                # Mensaje de bienvenida
-                messages.success(request, f'Bienvenido {user.p_nombre} {user.p_apellido}')
-                
-                # Redirigir al dashboard
-                return redirect('dashboard')
+                # ACTIVAMOS EL SWEET ALERT (no redirigimos aquí)
+                login_ok = True
             else:
                 messages.error(request, 'Credenciales inválidas')
     else:
         form = LoginForm()
     
-    return render(request, 'login.html', {'form': form})
+    return render(request, 'login.html', {'form': form, 'login_ok': login_ok})
+
 
 
 def logout_view(request):

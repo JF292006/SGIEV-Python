@@ -265,12 +265,18 @@ def list_categoria(request):
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
+    usuario = request.user                     # <-- usuario logueado
+    es_admin = request.user.tipo_usu == 'administrador'  # <-- bandera admin
+
     context = {
         'page_obj': page_obj,
         'search': search,
+        'usuario': usuario,     # <-- añadido para badge
+        'es_admin': es_admin    # <-- añadido para badge
     }
 
     return render(request, 'categoria/index.html', context)
+
 
 
 
@@ -290,7 +296,15 @@ def registro_categoria(request):
         
         categoria.save()
         return redirect('list_categoria')
-    return render(request, 'categoria/nuevocat.html')
+
+
+    usuario = request.user                     # <-- usuario logueado
+    es_admin = request.user.tipo_usu == 'administrador'  # <-- bandera del rol
+
+    return render(request, 'categoria/nuevocat.html', {
+        'usuario': usuario,      # <-- añadido para badge
+        'es_admin': es_admin     # <-- añadido para badge
+    })
 
 
 def pre_editar_categoria(request, id):
@@ -1287,13 +1301,25 @@ def listar_compras_proveedor(request):
     return render(request, 'proveedor/listar_compras.html', context)
 
 #PROVEEDOR
-@admin_required
+
 def listar_proveedores(request):
+    usuario = request.user  # este es el usuario logueado
+
     proveedores = Proveedor.objects.all()
-    return render(request, 'proveedor/listar_prov.html', {'proveedores': proveedores})
+    return render(request, 'proveedor/listar_prov.html', {
+        'proveedores': proveedores,
+        'usuario': usuario
+    })
+
 
 @admin_required
 def registrar_proveedor(request):
+    # ⬇️ Se obtiene el usuario logueado para poder mostrar su info en la plantilla
+    usuario = request.user  
+    
+    # ⬇️ Se calcula si el usuario es administrador (para mostrar el badge)
+    es_admin = request.user.tipo_usu == 'administrador'
+
     if request.method == 'POST':
         nombre = request.POST.get('nombre_proveedor')
         correo = request.POST.get('correo_proveedor')
@@ -1308,8 +1334,6 @@ def registrar_proveedor(request):
             messages.error(request, "Todos los campos obligatorios deben llenarse.")
             return redirect('registrar_proveedor')
         
-        
-
         proveedor = Proveedor(
             nombre_proveedor=nombre,
             correo_proveedor=correo,
@@ -1322,8 +1346,14 @@ def registrar_proveedor(request):
         )
         proveedor.save()
 
-        return redirect('listar_proveedores')  # Redirige al listado al terminar
-    return render(request, 'proveedor/registrarprov.html')
+        return redirect('listar_proveedores')
+
+    # ⬇️ Se envían las variables al contexto para que la plantilla pueda mostrar el badge
+    return render(request, 'proveedor/registrarprov.html', {
+        'usuario': usuario,
+        'es_admin': es_admin
+    })
+
 
 @admin_required
 def editar_proveedor(request, id):
@@ -1341,7 +1371,15 @@ def editar_proveedor(request, id):
         proveedor.save()
         return redirect('listar_proveedores')
 
-    return render(request, 'proveedor/editar_proveedor.html', {'proveedor': proveedor})
+    usuario = request.user                     # <-- usuario logueado
+    es_admin = request.user.tipo_usu == 'administrador'  # <-- bandera del rol
+
+    return render(request, 'proveedor/editar_proveedor.html', {
+        'proveedor': proveedor,
+        'usuario': usuario,      
+        'es_admin': es_admin     
+    })
+
 
 @admin_required
 def eliminar_proveedor(request, id):

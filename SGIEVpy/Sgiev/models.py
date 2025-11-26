@@ -65,9 +65,9 @@ class Usuarios(models.Model):
 
 class Producto(models.Model):
     nombre_producto = models.CharField(max_length=100)
-    descripcion_producto = models.TextField()
+    descripcion_producto = models.TextField(blank=True, null=True)
     codigo_barras = models.CharField(max_length=50)
-    registrosaniario = models.CharField(max_length=100)
+    registrosanitario = models.CharField(max_length=100)
     precio_compra = models.DecimalField(max_digits=10, decimal_places=2)
     precio_venta = models.DecimalField(max_digits=10, decimal_places=2)
     margen_ganancia = models.DecimalField(max_digits=10, decimal_places=2)
@@ -79,6 +79,24 @@ class Producto(models.Model):
     categoria_idcategoria = models.ForeignKey(Categoria, on_delete=models.CASCADE)
     proveedor_idproveedor = models.ForeignKey(Proveedor, on_delete=models.CASCADE)
     activo = models.SmallIntegerField()
+    class Meta:
+        
+        constraints = [
+            models.UniqueConstraint(
+                fields=['nombre_producto', 'descripcion_producto'], 
+                condition=models.Q(codigo_barras='SIN_LOTE_CATALOGO'), 
+                name='unique_maestro_producto'
+            )
+        ]
+        
+        verbose_name = "Producto"
+        verbose_name_plural = "Productos"
+
+    def __str__(self):
+        
+        if self.descripcion_producto:
+            return f"{self.nombre_producto} - {self.descripcion_producto}"
+        return self.nombre_producto
 
 class Venta(models.Model):
     fecha_factura = models.DateTimeField(auto_now_add=True)

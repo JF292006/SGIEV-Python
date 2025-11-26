@@ -15,7 +15,6 @@
     .table-carrito th { background-color: #f8f9fa; }
     .table-carrito tfoot td { font-weight: bold; border-top: 2px solid #dee2e6; }
     
-
     .fixed-actions-bar {
         position: fixed;
         bottom: 0;
@@ -31,18 +30,13 @@
         justify-content: flex-end; 
         align-items: center;
         
-   
-        
         margin-left: 250px; 
     }
 
- 
     #content {
-       
         padding-bottom: 150px !important; 
     }
     
-   
     #sidebar-container {
         min-width: 250px;
         width: 250px; 
@@ -57,10 +51,32 @@
             <h4 class="text-light font-weight-bold">Romar Natural</h4>
         </div>
         <div class="menu">
-            <a href="{% url 'dashboard' %}" class="d-block text-light p-3"><i class="icon ion-md-apps mr-2"></i>Panel</a>
-            <a href="{% url 'listar_proveedores' %}" class="d-block text-light p-3 active"><i class="icon ion-md-cube mr-2 lead"></i>Proveedores</a>
-            <a href="#" class="d-block text-light p-3"><i class="icon ion-md-cart mr-2 lead"></i>Ventas</a>
-            <a href="#" class="d-block text-light p-3"><i class="icon ion-md-folder mr-2 lead"></i>Inventario</a>
+            <a href="{% url 'dashboard' %}" class="d-block text-light p-3">
+                <i class="icon ion-md-apps mr-2"></i>Panel
+            </a>
+            <a href="{% url 'usuarios_listar' %}" class="d-block text-light p-3">
+                <i class="icon ion-md-contacts mr-2 lead"></i>Usuarios
+            </a>
+            <a href="{% url 'listar_proveedores' %}" class="d-block text-light p-3">
+                <i class="icon ion-md-cube mr-2 lead"></i>Proveedores
+            </a>
+            <a href="#" class="d-block text-light p-3">
+                <i class="icon ion-md-cart mr-2 lead"></i>Ventas
+            </a>
+            <a href="{% url 'list_categoria' %}" class="d-block text-light p-3">
+                <i class="icon ion-md-copy mr-2 lead"></i>Categoria
+            </a>
+            <a href="{% url 'list_producto' %}" class="d-block text-light p-3">
+                <i class="icon ion-md-folder mr-2 lead"></i>Inventario
+            </a>
+            <a href="{% url 'envios_listar' %}" class="d-block text-light p-3">
+                <i class="icon ion-md-bicycle mr-2 lead"></i>Envíos
+            </a>
+            {% if usuario.tipo_usu == 'administrador' %}
+            <a href="{% url 'mensajeria_listar' %}" class="d-block text-light p-3">
+                <i class="icon ion-md-bus mr-2 lead"></i>Mensajería
+            </a>
+            {% endif %}
         </div>
     </div>
 
@@ -88,6 +104,15 @@
                     <small class="text-muted">Proveedor ID: {{ proveedor.pk }}</small>
                 </div>
                 
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                {% endfor %}
+                
                 <h5 class="mt-4 mb-3 text-primary">Agregar Producto a la Compra</h5>
                 <form id="form_agregar_producto" method="POST" novalidate>
                     {% csrf_token %}
@@ -106,26 +131,48 @@
                             <input type="number" class="form-control" name="cantidad" min="1" value="1" required>
                         </div>
                         <div class="form-group col-md-3">
-                            <label>**Lote ***</label>
+                            <label>Lote *</label>
                             <input type="text" class="form-control" name="lote" required>
                         </div>
                         <div class="form-group col-md-3">
-                            <label>Precio unitario*</label>
+                            <label>Precio unitario (Compra) *</label>
                             <input type="number" step="0.01" class="form-control" name="valor_unitario" required>
                         </div>
                     </div>
 
-                    <div id="producto_existente_box" class="mb-3">
-                        <label>Seleccionar producto</label>
-                        <select class="form-control" name="producto_id">
-                            {% for pr in productos %}
-                                <option value="{{ pr.id }}">{{ pr.nombre_producto }} — Stock: {{ pr.stock_actual }}</option>
-                            {% endfor %}
-                        </select>
+                    <div class="form-row">
+                        <div class="form-group col-md-3">
+                            <label for="id_precio_venta">Precio de Venta (PVP) *</label>
+                            <input type="number" step="0.01" class="form-control" id="id_precio_venta" name="precio_venta" required>
+                            <small class="form-text text-muted">Precio al que se venderá al público.</small>
+                        </div>
+                        <div class="form-group col-md-3">
+                             <label>Fecha vencimiento</label>
+                            <input type="date" class="form-control" name="fecha_vencimiento">
+                        </div>
+                        
                     </div>
 
+
+                    <div id="producto_existente_box" class="mb-3">
+                                 <label>Seleccionar producto</label>
+                                 <select class="form-control" name="producto_id">
+                                        <option value="" selected disabled>-- Selecciona un producto de Catálogo --</option>
+                                       {% for pr in productos %}
+                                         <option value="{{ pr.id }}">
+                                              {{ pr.nombre_producto }} 
+                                                {% if pr.stock_actual is not None %}
+                                                   — Stock Total: {{ pr.stock_actual }}
+                                               {% else %}
+                                                   — Sin Stock
+                                               {% endif %}
+                                          </option>
+                                     {% endfor %}
+                                 </select>
+                                </div>
+
                     <div id="producto_nuevo_box" style="display:none;" class="mb-3 border p-3 rounded bg-light">
-                        <h5 class="text-info mb-3">Detalles del Nuevo Producto</h5>
+                        <h5 class="text-info mb-3">Detalles del Nuevo Producto (Maestro)</h5>
                         <div class="form-row">
                             <div class="form-group col-md-6">
                                 <label for="id_nombre_producto">Nombre Producto *</label>
@@ -146,37 +193,18 @@
                             <textarea class="form-control" id="id_descripcion_producto" name="descripcion_producto" rows="2"></textarea>
                         </div>
                         <div class="form-row">
-                            <div class="form-group col-md-4">
-                                <label for="id_codigo_barras">Código de Barras (Inicial)</label>
-                                <input type="text" class="form-control" id="id_codigo_barras" name="codigo_barras" maxlength="50">
-                            </div>
-                            <div class="form-group col-md-4">
+                            <div class="form-group col-md-6">
                                 <label for="id_registrosaniario">Registro Sanitario</label>
                                 <input type="text" class="form-control" id="id_registrosaniario" name="registrosaniario" maxlength="100">
                             </div>
-                            <div class="form-group col-md-4">
-                                <label for="id_precio_venta">Precio de Venta</label>
-                                <input type="number" step="0.01" class="form-control" id="id_precio_venta" name="precio_venta">
-                            </div>
+                            <div class="form-group col-md-3">
+                             <label for="id_stock_minimo">Stock Mínimo</label>
+                            <input type="number" class="form-control" id="id_stock_minimo" name="stock_minimo" value="1" min="1">
                         </div>
-                        <div class="form-row">
-                            <div class="form-group col-md-6">
-                                <label for="id_stock_minimo">Stock Mínimo</label>
-                                <input type="number" class="form-control" id="id_stock_minimo" name="stock_minimo" min="0" value="1">
-                            </div>
-                            <div class="form-group col-md-6">
-                                <label for="id_stock_maximo">Stock Máximo</label>
-                                <input type="number" class="form-control" id="id_stock_maximo" name="stock_maximo" min="0" value="1000">
-                            </div>
+                             </div>
                         </div>
-                    </div>
                     
-                    <div class="form-row">
-                        <div class="form-group col-md-6">
-                            <label>Fecha vencimiento (opcional)</label>
-                            <input type="date" class="form-control" name="fecha_vencimiento">
-                        </div>
-                    </div>
+                    
                     
                     <div class="d-flex justify-content-end mb-4">
                         <button type="submit" class="btn btn-info"><i class="icon ion-md-add-circle mr-2"></i>Añadir a la Lista de Compra</button>
@@ -184,7 +212,6 @@
                 </form>
                 
                 <hr>
-
                 <h5 class="mt-4 mb-3 text-secondary">Productos en la Lista de Compra (Carrito)</h5>
                 
                 {% if not carrito %}
@@ -213,7 +240,11 @@
                                         **{{ item.nombre }}** {% if item.lote %}
                                             <span class="badge badge-secondary ml-2">Lote: {{ item.lote }}</span>
                                         {% endif %}
-                                    </td>
+                                        {% if item.datos_nuevo_maestro.precio_venta %}
+                                            <small class="d-block text-muted">PVP: ${{ item.datos_nuevo_maestro.precio_venta|floatformat:2 }}</small>
+                                        {% endif %}
+                                        
+                                        </td>
                                     <td class="text-right">$ {{ item.precio|floatformat:2 }}</td>
                                     <td class="text-center">{{ item.cantidad }}</td>
                                     <td class="text-right">$ {{ item.subtotal|floatformat:2 }}</td>
@@ -256,12 +287,6 @@
                     <form id="form_finalizar_compra_details" method="POST" novalidate>
                         {% csrf_token %}
                         <input type="hidden" name="finalizar_compra" value="1">
-                        
-                        <div class="form-row">
-                            <div class="form-group col-md-4">
-                                <label>Número factura (opcional)</label>
-                                <input type="text" class="form-control" name="numero_factura">
-                            </div>
                              <div class="form-group col-md-4">
                                 <label>Estado de la compra</label>
                                 <select class="form-control" name="estado_compra">
@@ -301,7 +326,13 @@
         const nuevo = document.getElementById("producto_nuevo_box");
         const existente = document.getElementById("producto_existente_box");
         
-        const camposNuevo = nuevo.querySelectorAll('input, select');
+        // 🟢 CAMBIO 2: Remover 'id_precio_venta' de esta lista.
+        // Ahora es un campo global que tiene 'required' en el HTML.
+        const camposSoloNuevo = [
+            document.getElementById("id_nombre_producto"),
+            document.getElementById("id_categoria"),
+        ].filter(el => el != null); 
+        
         const campoProductoExistente = existente.querySelector('select');
         
         const toggleBoxes = () => {
@@ -309,7 +340,8 @@
                  nuevo.style.display = "block";
                  existente.style.display = "none";
                  
-                 camposNuevo.forEach(field => field.setAttribute('required', 'required'));
+                 // Hacemos obligatorios SÓLO los campos del Producto Nuevo Maestro
+                 camposSoloNuevo.forEach(field => field.setAttribute('required', 'required'));
                  if (campoProductoExistente) {
                      campoProductoExistente.removeAttribute('required');
                  }
@@ -318,7 +350,8 @@
                  nuevo.style.display = "none";
                  existente.style.display = "block";
                  
-                 camposNuevo.forEach(field => field.removeAttribute('required'));
+                 // Removemos el 'required' de los campos del Producto Nuevo Maestro
+                 camposSoloNuevo.forEach(field => field.removeAttribute('required'));
                  if (campoProductoExistente) {
                      campoProductoExistente.setAttribute('required', 'required');
                  }

@@ -35,6 +35,12 @@ urlpatterns = [
     path('proveedores/crear_compra/<int:idproveedor>/', views.crear_compra_proveedor, name='crear_compra_proveedor'),
     path('proveedores/quitar_producto/<int:idproveedor>/<str:temp_id>/', views.compra_quitar_producto, name='compra_quitar_producto'),
     path('proveedores/limpiar_carrito/<int:idproveedor>/', views.compra_limpiar_carrito, name='compra_limpiar_carrito'),
+    path('compra/<int:compra_id>/detalle/', views.detalle_compra_proveedor, name='detalle_compra_proveedor'),
+    path('compra/<int:compra_id>/recibir/', views.recibir_compra_pendiente, name='recibir_compra_pendiente'),
+    path('compra/nueva/<int:idproveedor>/', views.crear_compra_proveedor, name='crear_compra_proveedor'),
+    path('compra/<int:idproveedor>/quitar/<str:temp_id>/', views.compra_quitar_producto, name='compra_quitar_producto'),
+    path('compra/<int:idproveedor>/limpiar/', views.compra_limpiar_carrito, name='compra_limpiar_carrito'),
+    path('compra/detalle/<int:compra_id>/', views.detalle_compra_proveedor, name='detalle_compra_proveedor'),
 
 
     # Index / Landing Page

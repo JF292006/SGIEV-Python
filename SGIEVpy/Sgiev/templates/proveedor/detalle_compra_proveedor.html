@@ -5,7 +5,6 @@
 {% block content %}
 <div class="container-fluid">
 
-    <!-- Encabezado -->
     <div class="row mb-4">
         <div class="col-md-7">
             <h2 class="font-weight-bold">
@@ -21,14 +20,28 @@
         </div>
     </div>
 
-    <!-- Card: Información general -->
     <div class="card mb-4">
         <div class="card-header bg-light font-weight-bold">
             <i class="icon ion-md-information-circle-outline"></i> Información General
         </div>
 
         <div class="card-body">
-
+            
+            {% if compra.estado_compra == 'pendiente' %}
+                <div class="alert alert-warning d-flex justify-content-between align-items-center" role="alert">
+                    <p class="mb-0 font-weight-bold">
+                        Esta compra está **PENDIENTE** de recepción. 
+                        El stock no ha sido actualizado.
+                    </p>
+                    <form method="post" action="{% url 'recibir_compra_pendiente' compra_id=compra.id %}" onsubmit="return confirm('¿Está seguro de que desea marcar esta compra como RECIBIDA? Esto procederá a actualizar su inventario (stock y movimientos).');" class="ml-3">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-success">
+                            <i class="icon ion-md-checkmark-circle"></i> Marcar como Recibida y Actualizar Stock
+                        </button>
+                    </form>
+                </div>
+                <hr>
+            {% endif %}
             <div class="row">
 
                 <div class="col-md-4 mb-3">
@@ -66,9 +79,8 @@
         </div>
     </div>
 
-    <!-- Productos recibidos -->
     <h4 class="mb-3 font-weight-bold text-success">
-        <i class="icon ion-md-cube"></i> Productos Recibidos
+        <i class="icon ion-md-cube"></i> Detalles de la Compra
     </h4>
 
     <div class="card">
@@ -95,7 +107,7 @@
                             <td>{{ d.cantidad }}</td>
                             <td>${{ d.precio_compra_unitario|floatformat:2 }}</td>
                             <td>{{ d.lote }}</td>
-                            <td>{{ d.fecha_vencimiento|date:"Y-m-d" }}</td>
+                            <td>{{ d.fecha_vencimiento|date:"Y-m-d"|default:"N/A" }}</td>
                             <td>${{ d.subtotal_linea_compra|floatformat:2 }}</td>
                         </tr>
                         {% endfor %}

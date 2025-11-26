@@ -47,6 +47,7 @@ from django.utils import timezone
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 import json
+from django.db import IntegrityError, transaction
 
 def index(request):  
     """
@@ -345,15 +346,55 @@ def eliminar_categoria(request, id):
     return redirect('list_categoria')
 
 #PRODUCTOS
+# views.py
+import json
+from django.utils.safestring import mark_safe
+# IMPORTA ESTO:
+from django.db.models import Sum 
+from django.views.decorators.cache import never_cache
+# from .models import Producto, Compra_proveedor, Movimiento_inventario (Asegúrate de tener tus modelos importados)
+
+
+# views.py
+import json
+from django.utils.safestring import mark_safe
+# IMPORTA ESTO:
+from django.db.models import Sum 
+from django.views.decorators.cache import never_cache
+# from .models import Producto, Compra_proveedor, Movimiento_inventario (Asegúrate de tener tus modelos importados)
+
+
 @never_cache
 def list_producto(request):
     
+    productos_agrupados = Producto.objects.filter(activo=1).values(
+        'nombre_producto', 
+        'descripcion_producto',
+        'categoria_idcategoria__nombre_categoria',
+    ).annotate(
+        stock_total=Sum('stock_actual')
+    ).order_by('nombre_producto')
 
-    producto = Producto.objects.select_related('categoria_idcategoria', 'proveedor_idproveedor').all()
     
+    productos_final = []
+    for producto_agrupado in productos_agrupados:
+        
+        
+        lote_representativo = Producto.objects.filter(
+            nombre_producto=producto_agrupado['nombre_producto'],
+            descripcion_producto=producto_agrupado['descripcion_producto'],
+            activo=1
+        ).values('id').first() 
+        
+        if lote_representativo:
+            producto_agrupado['lote_id_representativo'] = lote_representativo['id']
+            productos_final.append(producto_agrupado)
 
+   
+    producto_lotes_original = Producto.objects.select_related('categoria_idcategoria', 'proveedor_idproveedor').all()
+    
     lotes_disponibles = []
-    for p in producto:
+    for p in producto_lotes_original:
         nombre = p.nombre_producto.strip()
         descripcion = p.descripcion_producto.strip()
         nombre_completo = f"{nombre} {descripcion}" 
@@ -370,33 +411,19 @@ def list_producto(request):
     lotes_json_safe = mark_safe(lotes_json_string) 
     
     
- 
-    try:
-        historial_compras = Compra_proveedor.objects.select_related(
-        'producto_idproducto__proveedor_idproveedor', 
-        'usuarios_id_usuario'
-    ).all().order_by('-fecha_compra')[:10]
-    except:
-        print(f"Error en select_related de Compra_proveedor: {e}")
     historial_compras = Compra_proveedor.objects.all().order_by('-fecha_compra')[:10]
-
-
-    try:
-        historial_salidas = Movimiento_inventario.objects.filter(
-            tipo_movimiento__in=['ajuste', 'venta']
-        ).order_by('-fecha_movimiento')[:15]
-    except:
-        print(f"Error al cargar historial de salidas: {e}")
-        historial_salidas = [] 
+    historial_salidas = Movimiento_inventario.objects.filter(
+        tipo_movimiento__in=['ajuste', 'venta']
+    ).order_by('-fecha_movimiento')[:15]
 
     data = {
-        'producto': producto,
+        
+        'producto': productos_final, 
         'lotes_json': lotes_json_safe,
-        'historial_compras': historial_compras,  
+        'historial_compras': historial_compras,
         'historial_salidas': historial_salidas, 
     }
     
-
     return render(request, 'producto/index.html', data)
 
 
@@ -418,72 +445,80 @@ def detalle_producto_modal(request, producto_id):
 def registro_producto(request):
     if request.method == "POST":
         
+       
         nombre = request.POST.get('nombre_producto')
         descripcion = request.POST.get('descripcion_producto')
-        codigo = request.POST.get('codigo_barras')
-        registro_sanitario = request.POST.get('registrosanitario')
-        precio_compra = request.POST.get('precio_compra') or "0"
-        precio_venta = request.POST.get('precio_venta') or "0"
-        margen = request.POST.get('margen_ganancia') or "0"
-        stock_actual = request.POST.get('stock_actual') or "0"
-        stock_min = request.POST.get('stock_minimo') or "0"
-        stock_max = request.POST.get('stock_maximo') or "0"
-        fecha_ven = request.POST.get('fecha_vencimiento')
-        fecha_cre = datetime.now()
+        
+        registro_sanitario_valor = request.POST.get('registrosanitario', '').strip()
+        if not registro_sanitario_valor:
+            registro_sanitario_valor = 'SIN_REGISTRO'
+        
         categoria_id = request.POST.get('categoria_idcategoria')
         proveedor_id = request.POST.get('proveedor_idproveedor')
-        activo = request.POST.get('activo') or 1
+        activo = 1 
+        
+        
+       
+        codigo = "SIN_LOTE_CATALOGO"
+        precio_compra = Decimal('0.00')
+        precio_venta = Decimal('0.00')
+        margen = Decimal('0.00')
+        stock_actual = 0
+        stock_min = 0
+        stock_max = 0
+        fecha_ven = date(2099, 12, 31) 
+        fecha_cre = timezone.now()
 
         
         try:
-            precio_compra = Decimal(precio_compra)
-        except InvalidOperation:
-            precio_compra = Decimal('0.00')
-        try:
-            precio_venta = Decimal(precio_venta)
-        except InvalidOperation:
-            precio_venta = Decimal('0.00')
-        try:
-            margen = Decimal(margen)
-        except InvalidOperation:
-            margen = Decimal('0.00')
+            categoria = get_object_or_404(Categoria, id=categoria_id)
+            proveedor = get_object_or_404(Proveedor, id=proveedor_id)
+            
+            
+            producto = Producto(
+                nombre_producto = nombre,
+                descripcion_producto = descripcion,
+                codigo_barras = codigo,
+                precio_compra = precio_compra,
+                precio_venta = precio_venta,
+                margen_ganancia = margen,
+                stock_actual = stock_actual,
+                stock_minimo = stock_min,
+                stock_maximo = stock_max,
+                fecha_vencimiento = fecha_ven, 
+                fecha_creacion = fecha_cre,
+                activo = activo,
+                registrosanitario = registro_sanitario_valor, 
+                categoria_idcategoria = categoria,
+                proveedor_idproveedor = proveedor,
+            )
+            
+            producto.save()
+            messages.success(request, f"Producto de catálogo '{nombre}' registrado exitosamente.")
+            return redirect('list_producto')
 
-        try:
-            stock_actual = int(stock_actual)
-        except:
-            stock_actual = 0
-        try:
-            stock_min = int(stock_min)
-        except:
-            stock_min = 0
-        try:
-            stock_max = int(stock_max)
-        except:
-            stock_max = 0
+        except IntegrityError:
+           
+            messages.error(request, f"Error: Ya existe un producto de catálogo con el nombre '{nombre}' y la misma descripción.")
+            
+           
+            categorias = Categoria.objects.filter(activo=1)
+            proveedores = Proveedor.objects.filter(activo=1)
+            
+        
+            data = {
+                'categorias': categorias, 
+                'proveedores': proveedores,
+                'form_data': request.POST 
+            }
+            return render(request, 'producto/nuevoprod.html', data)
+            
+        except Exception as e:
+             messages.error(request, f"Ocurrió un error inesperado al registrar el producto: {e}")
+             return redirect('list_producto')
 
-       
-        categoria = get_object_or_404(Categoria, id=categoria_id)
-        proveedor = get_object_or_404(Proveedor, id=proveedor_id)
 
-        producto = Producto(
-            nombre_producto = nombre,
-            descripcion_producto = descripcion,
-            codigo_barras = codigo,
-            registrosaniario = registro_sanitario,
-            precio_compra = precio_compra,
-            precio_venta = precio_venta,
-            margen_ganancia = margen,
-            stock_actual = stock_actual,
-            stock_minimo = stock_min,
-            stock_maximo = stock_max,
-            fecha_vencimiento = fecha_ven,
-            categoria_idcategoria = categoria,
-            proveedor_idproveedor = proveedor,
-            activo = activo
-        )
-        producto.save()
-        return redirect('list_producto')
-
+    
   
     categorias = Categoria.objects.filter(activo=1)
     proveedores = Proveedor.objects.filter(activo=1)
@@ -493,6 +528,7 @@ def registro_producto(request):
 
 
 def pre_editar_producto(request, id):
+    
     producto = get_object_or_404(Producto, id=id)
     categorias = Categoria.objects.filter(activo=1)
     proveedores = Proveedor.objects.filter(activo=1)
@@ -512,7 +548,7 @@ def editar_producto(request, id):
         producto.nombre_producto = request.POST.get('nombre_producto')
         producto.descripcion_producto = request.POST.get('descripcion_producto')
         producto.codigo_barras = request.POST.get('codigo_barras')
-        producto.registrosaniario = request.POST.get('registrosanitario')
+        producto.registrosanitario = request.POST.get('registrosanitario')
 
         
         from decimal import Decimal, InvalidOperation
@@ -830,245 +866,417 @@ def registrar_salida_inventario_ajuste(request):
 
     return redirect('list_producto')
 
-#VENTA DE PROVEEDOR
-from decimal import Decimal
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib import messages
-from django.db import transaction
+    
+def detalle_producto_modal(request, producto_id):
+    
+    lote_original = get_object_or_404(Producto, pk=producto_id)
+    
+    
+    nombre_prod_general = lote_original.nombre_producto
+    descripcion_prod_general = lote_original.descripcion_producto
+    
+    
+    todos_los_lotes_del_producto = Producto.objects.select_related(
+        'categoria_idcategoria', 'proveedor_idproveedor'
+    ).filter(
+        nombre_producto=nombre_prod_general,
+        descripcion_producto=descripcion_prod_general,
+        activo=1 
+    ).order_by('fecha_vencimiento', 'codigo_barras') 
+    
+   
+    stock_total_data = todos_los_lotes_del_producto.aggregate(total_stock=Sum('stock_actual'))
+    stock_total = stock_total_data['total_stock'] or 0
 
-@login_required 
+
+    ids_lotes = [l.id for l in todos_los_lotes_del_producto]
+    movimientos_producto = Movimiento_inventario.objects.filter(
+        producto_idproducto__in=ids_lotes
+    ).order_by('-fecha_movimiento')[:10]
+    
+    context = {
+        'producto_general': lote_original, 
+        'lotes': todos_los_lotes_del_producto,
+        'stock_total': stock_total,         
+        'movimientos': movimientos_producto,
+    }
+
+    return render(request, 'producto/detalle_producto_modal_content.html', context)
+
+
+
+
+#VENTA DE PROVEEDOR
+def _get_carrito(request, idproveedor):
+    carrito_key = f'carrito_compra_{idproveedor}'
+    return request.session.get(carrito_key, [])
+
+def _update_carrito(request, idproveedor, carrito):
+    carrito_key = f'carrito_compra_{idproveedor}'
+    request.session[carrito_key] = carrito
+    request.session.modified = True
+
+def _calcular_totales_carrito(carrito):
+    subtotal_compra = Decimal('0.00')
+    for item in carrito:
+        subtotal_compra += item['subtotal']
+    
+    iva_compra = subtotal_compra * Decimal('0.19')
+    total_compra = subtotal_compra + iva_compra
+
+    return subtotal_compra.quantize(Decimal('0.01')), iva_compra.quantize(Decimal('0.01')), total_compra.quantize(Decimal('0.01'))
+
 @transaction.atomic
+@login_required 
 def crear_compra_proveedor(request, idproveedor):
     proveedor = get_object_or_404(Proveedor, id=idproveedor)
-    productos = Producto.objects.filter(activo=1)
     categorias = Categoria.objects.filter(activo=1)
+    
+    
+    productos_maestros = Producto.objects.filter(
+        activo=1, 
+        codigo_barras='SIN_LOTE_CATALOGO' 
+    ).order_by('nombre_producto')
 
+    
+    stock_consolidado = Producto.objects.filter(
+        nombre_producto__in=[p.nombre_producto for p in productos_maestros]
+    ).values(
+        'nombre_producto'
+    ).annotate(
+        stock_total=Sum('stock_actual')
+    )
+    
+    stock_dict = {item['nombre_producto']: item['stock_total'] for item in stock_consolidado}
+
+    
+    for p in productos_maestros:
+        p.stock_actual = stock_dict.get(p.nombre_producto, 0)
+    
+    
+    
+    carrito = _get_carrito(request, idproveedor)
+    subtotal_compra, iva_compra, total_compra = _calcular_totales_carrito(carrito)
+    
     if request.method == "POST":
         
-        tipo = request.POST.get("tipo_producto")
-        estado = request.POST.get("estado_compra", "recibida")
-        observaciones = request.POST.get("observaciones", "")
-        numero_factura = request.POST.get("numero_factura", "")
-        fecha_vencimiento_detalle = request.POST.get("fecha_vencimiento") or None
-        lote = request.POST.get("lote", "")
         
-        try:
-            cantidad = int(request.POST.get("cantidad", "0"))
-            precio_unitario = Decimal(request.POST.get("valor_unitario") or "0")
-        except:
-            messages.error(request, "Error en el formato de la cantidad o el valor unitario.")
-         
-            return redirect("listar_proveedores") 
+        
+        if 'agregar_producto' in request.POST:
+      
+            
+            tipo = request.POST.get("tipo_producto")
+            fecha_vencimiento_detalle = request.POST.get("fecha_vencimiento") or None
+            lote = request.POST.get("lote", "")
+            
+            try:
+                cantidad = int(request.POST.get("cantidad", "0"))
+                precio_unitario = Decimal(request.POST.get("valor_unitario") or "0")
+            except:
+                messages.error(request, "Error en el formato de la cantidad o el valor unitario.")
+                return redirect("crear_compra_proveedor", idproveedor=idproveedor)
+        
+            if cantidad <= 0 or precio_unitario <= Decimal('0'):
+                messages.error(request, "La cantidad y el precio unitario deben ser mayores a cero.")
+                return redirect("crear_compra_proveedor", idproveedor=idproveedor)
+                
+            subtotal_linea = cantidad * precio_unitario
 
-        if cantidad <= 0 or precio_unitario <= Decimal('0'):
-            messages.error(request, "La cantidad y el precio unitario deben ser mayores a cero.")
-            return redirect("listar_proveedores")
+            
+            producto_id = None
+            nombre_producto = ""
 
-        subtotal_linea = cantidad * precio_unitario
-        iva = subtotal_linea * Decimal("0.19")
-        total = subtotal_linea + iva
+            if tipo == "nuevo":
+              
+                categoria_id = request.POST.get('categoria')
+                nombre_producto_post = request.POST.get('nombre_producto')
+                
+                
+               
+                if not categoria_id or not nombre_producto_post:
+                    messages.error(request, "Nombre y Categoría son requeridos para el producto nuevo.")
+                    return redirect("crear_compra_proveedor", idproveedor=idproveedor)
+                
+                categoria_obj = get_object_or_404(Categoria, id=categoria_id)
+                
+               
+                precio_venta = Decimal('0.00')
+                margen_calculado = Decimal('0.00')
+                
+                
 
-        producto = None
+                producto = Producto.objects.create(
+                    nombre_producto=nombre_producto_post,
+                    descripcion_producto=request.POST.get('descripcion_producto', ''),
+                    codigo_barras='SIN_LOTE_CATALOGO', 
+                    registrosanitario=request.POST.get('registrosanitario', ''),
+                    precio_compra=precio_unitario, 
+                    precio_venta=precio_venta, 
+                    margen_ganancia=margen_calculado, 
+                    stock_actual=0, 
+                    stock_minimo=int(request.POST.get('stock_minimo') or 1),
+                    stock_maximo=int(request.POST.get('stock_maximo') or 1000),
+                    categoria_idcategoria=categoria_obj, 
+                    proveedor_idproveedor_id=proveedor.id,
+                    activo=1
+                )
+                producto_id = producto.id
+                nombre_producto = producto.nombre_producto
+                
+            else: 
+                producto_id = request.POST.get("producto_id")
+                if not producto_id:
+                    messages.error(request, "Debe seleccionar un producto existente.")
+                    return redirect("crear_compra_proveedor", idproveedor=idproveedor)
+                
+                producto = get_object_or_404(Producto, id=producto_id)
+                nombre_producto = producto.nombre_producto
+
+
+            
+            item_carrito = {
+                'temp_id': str(uuid.uuid4()),
+                'producto_id': producto_id,
+                'nombre': nombre_producto,
+                'cantidad': cantidad,
+                'precio': precio_unitario,
+                'subtotal': subtotal_linea.quantize(Decimal('0.01')),
+                'lote': lote,
+                'fecha_vencimiento': fecha_vencimiento_detalle,
+                
+                'proveedor_id': proveedor.id, 
+            }
+            carrito.append(item_carrito)
+            _update_carrito(request, idproveedor, carrito)
+
+            messages.success(request, f"Producto '{nombre_producto}' añadido a la lista de compra.")
+            return redirect("crear_compra_proveedor", idproveedor=idproveedor)
+
+
+        elif 'finalizar_compra' in request.POST:
+            
+            
+            if not carrito:
+                messages.error(request, "La lista de compra está vacía.")
+                return redirect("crear_compra_proveedor", idproveedor=idproveedor)
+            
+            estado = request.POST.get("estado_compra", "pendiente")
+            observaciones = request.POST.get("observaciones", "")
+            numero_factura = request.POST.get("numero_factura", "")
+            
+            
+            subtotal_compra, iva_compra, total_compra = _calcular_totales_carrito(carrito)
+            
+            
+            compra = Compra_proveedor.objects.create(
+                numero_factura_compra=numero_factura if numero_factura else f"CMP{Compra_proveedor.objects.count()+1}",
+                subtotal_compra=subtotal_compra,
+                iva_compra=iva_compra,
+                total_compra=total_compra,
+                estado_compra=estado,
+                observaciones_compra=observaciones,
+                usuarios_id_usuario=request.user,
+                proveedor_idproveedor_id=proveedor.id, 
+            )
+
+            for item in carrito:
+                producto_maestro = get_object_or_404(Producto, id=item['producto_id'])
+                
+                
+                precio_unitario = item['precio']
+                precio_venta_maestro = producto_maestro.precio_venta
+                
+                if precio_unitario > Decimal('0') and precio_venta_maestro > Decimal('0'):
+                    nuevo_margen = ((precio_venta_maestro - precio_unitario) / precio_unitario) * Decimal('100.00')
+                    producto_maestro.margen_ganancia = nuevo_margen.quantize(Decimal('0.01'))
+              
+                
+                producto_maestro.precio_compra = precio_unitario
+                producto_maestro.save()
+                
+            
+                Producto.objects.create(
+                    nombre_producto=item['nombre'],
+                    descripcion_producto=producto_maestro.descripcion_producto,
+                    codigo_barras=producto_maestro.codigo_barras + '_' + item['lote'], 
+                    registrosanitario=producto_maestro.registrosanitario,
+                    precio_compra=precio_unitario,
+                    precio_venta=precio_venta_maestro,
+                    margen_ganancia=producto_maestro.margen_ganancia,
+                    stock_actual=item['cantidad'] if estado == 'recibida' else 0, 
+                    stock_minimo=producto_maestro.stock_minimo,
+                    stock_maximo=producto_maestro.stock_maximo,
+                    fecha_vencimiento=item['fecha_vencimiento'],
+                    categoria_idcategoria=producto_maestro.categoria_idcategoria,
+                    
+                    proveedor_idproveedor_id=proveedor.id, 
+                    activo=1,
+                    
+                )
+
+                
+                Compra_detalle.objects.create(
+                    compra_idcompra=compra,
+                    producto_idproducto=producto_maestro, 
+                    cantidad=item['cantidad'],
+                    precio_compra_unitario=item['precio'],
+                    subtotal_linea_compra=item['subtotal'],
+                    lote=item['lote'],
+                    fecha_vencimiento=item['fecha_vencimiento']
+                )
+
+            
+                if estado == 'recibida':
+                    
+                    producto_maestro.stock_actual += item['cantidad']
+                    producto_maestro.save()
+                    
+                    
+            request.session.pop(f'carrito_compra_{idproveedor}', None)
+            messages.success(request, f"Compra #{compra.numero_factura_compra} registrada como '{estado.upper()}'.")
+            return redirect("detalle_compra_proveedor", compra_id=compra.id)
+
+
+        
+        return redirect("crear_compra_proveedor", idproveedor=idproveedor)
+        
         
     
-        if tipo == "nuevo":
-            categoria_id = request.POST.get('categoria')
-            nombre_producto = request.POST.get('nombre_producto')
-            precio_venta_post = request.POST.get('precio_venta')
-
-            if not categoria_id or not nombre_producto:
-                 messages.error(request, "Nombre y Categoría son requeridos para el producto nuevo.")
-                 return redirect("listar_proveedores")
-            
-           
-            
-            categoria_obj = get_object_or_404(Categoria, id=categoria_id)
-            precio_venta = Decimal(precio_venta_post or '0')
-
-            
-            margen_calculado = Decimal('0.00')
-            if precio_unitario > Decimal('0'):
-                margen_calculado = ((precio_venta - precio_unitario) / precio_unitario) * Decimal('100.00')
-                margen_calculado = margen_calculado.quantize(Decimal('0.01'))
-
-            
-            producto = Producto.objects.create(
-                nombre_producto=nombre_producto,
-                descripcion_producto=request.POST.get('descripcion_producto', ''),
-                codigo_barras=request.POST.get('codigo_barras', ''),
-                registrosaniario=request.POST.get('registrosaniario', ''),
-                precio_compra=precio_unitario,
-                precio_venta=precio_venta,
-                margen_ganancia=margen_calculado,
-                stock_actual=0, 
-                stock_minimo=int(request.POST.get('stock_minimo') or 1),
-                stock_maximo=int(request.POST.get('stock_maximo') or 1000),
-                fecha_vencimiento=fecha_vencimiento_detalle, 
-                categoria_idcategoria=categoria_obj, 
-                proveedor_idproveedor=proveedor,
-                activo=1
-            )
-        else:
-            # PRODUCTO EXISTENTE
-            producto_id = request.POST.get("producto_id")
-            if not producto_id:
-                messages.error(request, "Debe seleccionar un producto existente.")
-                return redirect("listar_proveedores")
-            producto = get_object_or_404(Producto, id=producto_id)
-
-       # CREACIÓN DE LA COMPRA Y EL DETALLE 
-        if not hasattr(request.user, 'pk'):
-             messages.error(request, "Usuario no autenticado correctamente.")
-             return redirect("login") 
-
-        compra = Compra_proveedor.objects.create(
-            numero_factura_compra=numero_factura if numero_factura else f"CMP{Compra_proveedor.objects.count()+1}",
-            subtotal_compra=subtotal_linea,
-            iva_compra=iva,
-            total_compra=total,
-            estado_compra=estado,
-            observaciones_compra=observaciones,
-            imagen_factura_compra="",
-            usuarios_id_usuario=request.user,
-            producto_idproducto=producto 
-        )
-
-        Compra_detalle.objects.create(
-            compra_idcompra=compra,
-            producto_idproducto=producto,
-            cantidad=cantidad,
-            precio_compra_unitario=precio_unitario,
-            subtotal_linea_compra=subtotal_linea,
-            lote=lote,
-            fecha_vencimiento=fecha_vencimiento_detalle
-        )
-
-       
-        producto.stock_actual += cantidad
-        producto.precio_compra = precio_unitario 
-        
-        if producto.precio_venta > Decimal('0') and producto.precio_compra > Decimal('0'):
-             nuevo_margen = ((producto.precio_venta - producto.precio_compra) / producto.precio_compra) * Decimal('100.00')
-             producto.margen_ganancia = nuevo_margen.quantize(Decimal('0.01'))
-
-        producto.save()
-
-        messages.success(request, "Compra registrada exitosamente.")
-        return redirect("listar_proveedores")
-
+    
     return render(request, "proveedor/crear_compra.html", {
         "proveedor": proveedor,
-        "productos": productos,
-        "categorias": categorias,
+        "productos": productos_maestros, 
+        "carrito": carrito,
+        "subtotal_compra": subtotal_compra,
+        "iva_compra": iva_compra,
+        "total_compra": total_compra,
     })
 
 
-
-
-def agregar_al_carrito_compra(request, proveedor, productos, categorias):
-    """
-    Agrega un producto a la lista de compra (carrito) en la sesión.
-    Se ha añadido la obligatoriedad del campo 'lote'.
-    """
+@login_required
+def compra_quitar_producto(request, idproveedor, temp_id):
+    carrito = _get_carrito(request, idproveedor)
     
+    carrito_actualizado = [item for item in carrito if item['temp_id'] != temp_id]
+    
+    if len(carrito_actualizado) < len(carrito):
+        _update_carrito(request, idproveedor, carrito_actualizado)
+        messages.info(request, "Producto eliminado de la lista de compra.")
+    else:
+        messages.error(request, "Error: Producto no encontrado en la lista.")
+
+    return redirect("crear_compra_proveedor", idproveedor=idproveedor)
+
+@login_required
+def compra_limpiar_carrito(request, idproveedor):
+    request.session.pop(f'carrito_compra_{idproveedor}', None)
+    request.session.modified = True
+    messages.info(request, "Lista de compra limpiada.")
+    return redirect("crear_compra_proveedor", idproveedor=idproveedor)
+
+@transaction.atomic
+def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
+    proveedor = get_object_or_404(Proveedor, id=proveedor_id)
+    
+    if request.method != "POST":
+        messages.error(request, "Método de solicitud no válido.")
+        return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
+
     tipo = request.POST.get("tipo_producto")
-    
+
     try:
         cantidad = int(request.POST.get("cantidad", "0"))
-        precio_unitario = Decimal(request.POST.get("valor_unitario") or "0")
+        precio_compra_unitario = Decimal(request.POST.get("valor_unitario") or "0") 
         lote_detalle = request.POST.get("lote") 
+        fecha_vencimiento = request.POST.get("fecha_vencimiento") or None
+        descripcion_producto = request.POST.get('descripcion_producto', '') 
         
-        if not lote_detalle:
-            messages.error(request, "El campo Lote es obligatorio para agregar al carrito.")
-            return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
-
-        if cantidad <= 0 or precio_unitario <= Decimal('0'):
-            messages.error(request, "La cantidad y el precio unitario deben ser mayores a cero.")
+        if cantidad <= 0 or precio_compra_unitario <= Decimal('0') or not lote_detalle:
+            messages.error(request, "Cantidad, Precio Unitario y Lote son obligatorios y deben ser válidos.")
             return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
             
-    except:
-        messages.error(request, "Error en el formato de la cantidad o el precio unitario.")
-        return redirect('crear_compra_proveedor', idproveedor=proveedor.id) 
+    except Exception as e:
+        messages.error(request, f"Error en el formato de datos comunes: {e}")
+        return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
 
-    fecha_vencimiento = request.POST.get("fecha_vencimiento") or None
-    nombre_producto = ""
-    producto_id = None
-    
-   
+    categoria_id_en_carrito = None
+    producto_id_en_carrito = 0
+    nombre_producto_en_carrito = ""
+    precio_venta = Decimal('0.00')
+
     if tipo == "nuevo":
+        
         nombre_producto = request.POST.get('nombre_producto')
         categoria_id = request.POST.get('categoria')
         
-        if not categoria_id or not nombre_producto:
-            messages.error(request, "Nombre y Categoría son requeridos para el producto nuevo.")
-            return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
+        precio_venta_post = request.POST.get('precio_venta')
+        precio_venta = Decimal(precio_venta_post or "0")
+        categoria_id_en_carrito = categoria_id
 
-        if not fecha_vencimiento:
-            messages.error(request, "La fecha de vencimiento es obligatoria para productos nuevos.")
-            return redirect('crear_compra_proveedor', idproveedor=proveedor.id)    
-        
-        producto_id = None 
-    else:
-        
-        producto_id_post = request.POST.get("producto_id")
-        if not producto_id_post:
-            messages.error(request, "Debe seleccionar un producto existente.")
+        if not nombre_producto or not categoria_id or precio_venta <= Decimal('0'):
+            messages.error(request, "Faltan datos obligatorios del producto nuevo (Nombre, Categoría, Precio Venta).")
             return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
-            
         
-        producto_existente_obj = get_object_or_404(Producto, id=producto_id_post) 
-        nombre_producto = producto_existente_obj.nombre_producto
-        producto_id = producto_existente_obj.id
+        
+        producto_id_en_carrito = 0
+        nombre_producto_en_carrito = nombre_producto
+        
     
-    
-   
+    elif tipo == "existente":
+        producto_id_post = request.POST.get("producto_id")
+        
+        producto_existente_obj = get_object_or_404(Producto, id=producto_id_post, codigo_barras='SIN_LOTE_CATALOGO')
+        
+        producto_id_en_carrito = producto_existente_obj.id
+        nombre_producto_en_carrito = producto_existente_obj.nombre_producto
+        categoria_id_en_carrito = producto_existente_obj.categoria_idcategoria.id
+        
+        precio_venta_post = request.POST.get('precio_venta')
+        precio_venta = Decimal(precio_venta_post or str(producto_existente_obj.precio_venta))
+        
+    else:
+        messages.error(request, "Tipo de producto no válido.")
+        return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
+
+
+
     carrito_key = f'carrito_compra_{proveedor.id}'
     carrito = request.session.get(carrito_key, [])
+    subtotal_linea = cantidad * precio_compra_unitario
     
-    subtotal_linea = cantidad * precio_unitario
-
-   
+    
     nuevo_item = {
         'temp_id': str(uuid4()), 
         'tipo': tipo,
-        'producto_id': producto_id, 
-        'nombre': nombre_producto,
-        'precio': float(precio_unitario),
+        'producto_id': producto_id_en_carrito,
+        'nombre': nombre_producto_en_carrito,
+        'precio': float(precio_compra_unitario), 
         'cantidad': cantidad,
         'subtotal': float(subtotal_linea),
         'fecha_vencimiento': fecha_vencimiento,
-        'lote': lote_detalle, 
+        'lote': lote_detalle,
+        'categoria_id': categoria_id_en_carrito if categoria_id_en_carrito else None,
+        
+        'datos_nuevo_maestro': {
+            'precio_venta': float(precio_venta) if tipo == 'nuevo' else None, 
+            'registro_sanitario': request.POST.get('registrosaniario', '') if tipo == 'nuevo' else None,
+            'stock_minimo': int(request.POST.get('stock_minimo') or 1) if tipo == 'nuevo' else None,
+            'stock_maximo': int(request.POST.get('stock_maximo') or 1000) if tipo == 'nuevo' else None,
+            'descripcion_producto': descripcion_producto if tipo == 'nuevo' else None,
+            
+        } if tipo == 'nuevo' else None
     }
     
-  
-    if tipo == "nuevo":
-        nuevo_item.update({
-            'categoria': categoria_id,
-            'descripcion_producto': request.POST.get('descripcion_producto', ''),
-            'registrosaniario': request.POST.get('registrosaniario', ''),
-            'precio_venta': request.POST.get('precio_venta') or '0',
-            'stock_minimo': request.POST.get('stock_minimo') or 1,
-            'stock_maximo': request.POST.get('stock_maximo') or 1000,
-            'codigo_barras_nuevo': request.POST.get('codigo_barras', ''), 
-        })
-    
-   
     carrito.append(nuevo_item)
     
     
-    request.session[carrito_key] = carrito
-    request.session.modified = True
-    
-    messages.success(request, f'Producto añadido a la lista: {nombre_producto}')
+    messages.success(request, f'Producto añadido a la lista: {nombre_producto_en_carrito}')
     return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
 
 
 @transaction.atomic
 def procesar_compra_final(request, proveedor):
-    """
-    Procesa la compra final, gestionando la creación/búsqueda de productos,
-    actualización de stock y asegurando la integridad de los campos NOT NULL.
-    """
+    
     carrito_key = f'carrito_compra_{proveedor.id}'
     carrito = request.session.get(carrito_key, [])
     
@@ -1081,11 +1289,10 @@ def procesar_compra_final(request, proveedor):
     numero_factura = request.POST.get("numero_factura", "")
 
     try:
-     
+        
         subtotal_compra = sum(Decimal(str(item['subtotal'])) for item in carrito)
         iva_compra = subtotal_compra * Decimal("0.19") 
         total_compra = subtotal_compra + iva_compra
-        
         
         compra = Compra_proveedor.objects.create(
             numero_factura_compra=numero_factura if numero_factura else f"CMP{Compra_proveedor.objects.count()+1}",
@@ -1099,7 +1306,6 @@ def procesar_compra_final(request, proveedor):
             proveedor_idproveedor=proveedor
         )
         
-     
         for item in carrito:
             producto = None
             precio_unitario = Decimal(str(item['precio']))
@@ -1107,62 +1313,149 @@ def procesar_compra_final(request, proveedor):
             fecha_vencimiento_detalle = item['fecha_vencimiento']
             lote_detalle = item['lote']
             subtotal_linea = Decimal(str(item['subtotal']))
+            stock_anterior = 0 
             
-         
+          
             if item['tipo'] == "nuevo":
                 
-                fecha_vencimiento_final = fecha_vencimiento_detalle
-                if not fecha_vencimiento_final:
-                    fecha_vencimiento_final = date.today() 
+                datos_maestro = item.get('datos_nuevo_maestro', {})
                 
-                categoria_obj = get_object_or_404(Categoria, id=item['categoria'])
-                precio_venta = Decimal(item['precio_venta'])
+                fecha_vencimiento_final = fecha_vencimiento_detalle or date(2099, 12, 31) 
+                categoria_id_from_carrito = item.get('categoria_id')
+                
+                if not categoria_id_from_carrito:
+                    raise Exception("ID de categoría no encontrado en el carrito para producto nuevo.")
+                
+                
+                categoria_obj = get_object_or_404(Categoria, id=categoria_id_from_carrito)
+                
+                precio_venta_float = datos_maestro.get('precio_venta')
+                precio_venta = Decimal(str(precio_venta_float)) if precio_venta_float else Decimal('0.00')
+
+                descripcion_producto = datos_maestro.get('descripcion_producto', '')
+                registrosanitario = datos_maestro.get('registro_sanitario', '')
+                stock_minimo_val = datos_maestro.get('stock_minimo') or 1
+                stock_maximo_val = datos_maestro.get('stock_maximo') or 999999 
 
                 margen_calculado = Decimal('0.00')
-                if precio_unitario > Decimal('0'):
+                if precio_unitario > Decimal('0') and precio_venta > Decimal('0'):
                     nuevo_margen_calc = ((precio_venta - precio_unitario) / precio_unitario) * Decimal('100.00')
                     margen_calculado = nuevo_margen_calc.quantize(Decimal('0.01'))
-
+                
+                
+               
                 try:
-                    producto = Producto.objects.create(
+                    producto_maestro, creado_maestro = Producto.objects.get_or_create(
                         nombre_producto=item['nombre'],
-                        descripcion_producto=item['descripcion_producto'],
-                        codigo_barras=item.get('codigo_barras_nuevo', ''), 
-                        registrosaniario=item['registrosaniario'],
-                        precio_compra=precio_unitario,
-                        precio_venta=precio_venta,
-                        margen_ganancia=margen_calculado,
-                        stock_actual=0, 
-                        stock_minimo=int(item['stock_minimo']),
-                        stock_maximo=int(item['stock_maximo']),
-                        fecha_vencimiento=fecha_vencimiento_final,
-                        categoria_idcategoria=categoria_obj, 
+                        descripcion_producto=descripcion_producto, 
+                        codigo_barras='SIN_LOTE_CATALOGO', 
                         proveedor_idproveedor=proveedor,
+                        defaults={
+                            'registrosanitario': registrosanitario,
+                            'precio_compra': precio_unitario,
+                            'precio_venta': precio_venta,
+                            'margen_ganancia': margen_calculado,
+                            'stock_actual': 0, 
+                            'stock_minimo': stock_minimo_val,
+                            'stock_maximo': stock_maximo_val,
+                            'fecha_vencimiento': date(2099, 12, 31), 
+                            'categoria_idcategoria': categoria_obj,
+                            'activo': 1
+                        }
+                    )
+                except IntegrityError as e:
+                    
+                    transaction.set_rollback(True) 
+                    messages.error(request, f"Error de unicidad del catálogo: Ya existe el producto '{item['nombre']}' con la misma descripción.")
+                    return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
+                
+                
+                
+                if not creado_maestro:
+                    producto_maestro.precio_compra = precio_unitario
+                    producto_maestro.precio_venta = precio_venta
+                    producto_maestro.margen_ganancia = margen_calculado
+                    producto_maestro.save()
+
+
+                
+                
+                producto = Producto.objects.create(
+                    nombre_producto=item['nombre'],
+                    descripcion_producto=descripcion_producto, 
+                    codigo_barras=lote_detalle, 
+                    registrosanitario=registrosanitario, 
+                    precio_compra=precio_unitario,
+                    precio_venta=precio_venta,
+                    margen_ganancia=margen_calculado,
+                    stock_actual=0, 
+                    stock_minimo=stock_minimo_val,
+                    stock_maximo=stock_maximo_val,
+                    fecha_vencimiento=fecha_vencimiento_final,
+                    categoria_idcategoria=categoria_obj, 
+                    proveedor_idproveedor=proveedor,
+                    activo=1
+                )
+                stock_anterior = 0
+            
+            
+            else: 
+                
+                producto_id_from_carrito = item.get('producto_id')
+                producto_base = Producto.objects.get(id=producto_id_from_carrito)
+                
+                fecha_vencimiento_final = fecha_vencimiento_detalle or producto_base.fecha_vencimiento or date(2099, 12, 31)
+
+                precio_venta_float_global = item.get('precio_venta') 
+                precio_venta_global = Decimal(str(precio_venta_float_global)) if precio_venta_float_global else producto_base.precio_venta
+
+                margen_calculado_global = producto_base.margen_ganancia
+                if precio_unitario > Decimal('0') and precio_venta_global > Decimal('0'):
+                    nuevo_margen_calc = ((precio_venta_global - precio_unitario) / precio_unitario) * Decimal('100.00')
+                    margen_calculado_global = nuevo_margen_calc.quantize(Decimal('0.01'))
+                
+                try:
+                    
+                    producto = Producto.objects.get(
+                        nombre_producto=producto_base.nombre_producto,
+                        codigo_barras=lote_detalle, 
                         activo=1
                     )
-                except Exception as product_e:
+                    stock_anterior = producto.stock_actual 
                     
-                    raise Exception(f"Fallo al crear el producto nuevo '{item['nombre']}'. Causa: {str(product_e)}")
-            
-            else:
-             
-                producto_id_from_carrito = item.get('producto_id')
-                
-                if not producto_id_from_carrito:
-                   
-                    raise Exception(f"El ID del producto existente '{item['nombre']}' es nulo o inválido en el carrito.")
-
-                try:
+                    producto.precio_venta = precio_venta_global
+                    producto.margen_ganancia = margen_calculado_global
                     
-                    producto = Producto.objects.get(id=producto_id_from_carrito)
                 except Producto.DoesNotExist:
-                    raise Exception(f"El producto existente '{item['nombre']}' (ID: {producto_id_from_carrito}) ya no existe en la base de datos.")
-            
-            
-            
+                    
+                    producto = Producto.objects.create(
+                        nombre_producto=producto_base.nombre_producto,
+                        descripcion_producto=producto_base.descripcion_producto,
+                        categoria_idcategoria=producto_base.categoria_idcategoria,
+                        proveedor_idproveedor=proveedor, 
+                        
+                        codigo_barras=lote_detalle, 
+                        fecha_vencimiento=fecha_vencimiento_final,
+                        precio_venta=precio_venta_global,
+                        margen_ganancia=margen_calculado_global, 
+                        
+                        stock_minimo=producto_base.stock_minimo, 
+                        stock_maximo=producto_base.stock_maximo,
+                        
+                        precio_compra=precio_unitario,
+                        stock_actual=0, 
+                        registrosanitario=producto_base.registrosanitario,
+                        activo=1
+                    )
+                    stock_anterior = 0 
+
+
             if not producto or not producto.pk:
-                 raise Exception(f"El objeto Producto es nulo para '{item['nombre']}' antes de crear el detalle.")
-                 
+                
+                raise Exception(f"El objeto Producto (Lote) es nulo para '{item['nombre']}'.")
+                
+            
+            
             Compra_detalle.objects.create(
                 compra_idcompra=compra,
                 producto_idproducto=producto, 
@@ -1170,79 +1463,126 @@ def procesar_compra_final(request, proveedor):
                 precio_compra_unitario=precio_unitario,
                 subtotal_linea_compra=subtotal_linea,
                 lote=lote_detalle,
-                fecha_vencimiento=fecha_vencimiento_detalle
+                fecha_vencimiento=fecha_vencimiento_detalle 
             )
-           
+            
+            
             if estado == 'recibida':
-                producto.stock_actual += cantidad
-                producto.precio_compra = precio_unitario 
                 
-
+                producto.stock_actual += cantidad
+                producto.precio_compra = precio_unitario
+                
                 if producto.precio_venta > Decimal('0') and producto.precio_compra > Decimal('0'):
                     nuevo_margen = ((producto.precio_venta - producto.precio_compra) / producto.precio_compra) * Decimal('100.00')
                     producto.margen_ganancia = nuevo_margen.quantize(Decimal('0.01'))
+                    
                 
-                try:
-                    producto.save() 
-                except Exception as e:
-                    raise Exception(f"Fallo al guardar el producto {producto.nombre_producto}: {str(e)}")
+                producto.save() 
+                
+                
+                Movimiento_inventario.objects.create(
+                    producto_idproducto=producto, 
+                    tipo_movimiento='compra',
+                    cantidad=cantidad,
+                    stock_anterior=stock_anterior,
+                    stock_nuevo=producto.stock_actual,
+                    precio_unitario=precio_unitario,
+                    valor_total=subtotal_linea,
+                    referencia_id=compra.pk,
+                    tipo_referencia='compra',
+                    observaciones=f"Entrada por compra {compra.numero_factura_compra}. Lote: {lote_detalle}",
+                    imagen_comprobante="",
+                    usuarios_id_usuario=request.user 
+                )
 
 
-    
+        
         request.session[carrito_key] = []
         request.session.modified = True
         
         messages.success(request, f"Compra {compra.numero_factura_compra} registrada exitosamente. Total: ${total_compra:,.2f}")
-        return redirect("listar_proveedores")
+        return redirect("listar_compras") 
 
     except Exception as e:
-     
+        
+        transaction.set_rollback(True) 
         messages.error(request, f'Error CRÍTICO al procesar la compra. Detalles: {str(e)}')
+        
         return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
-
 
 
 @login_required
 def crear_compra_proveedor(request, idproveedor):
-    """
-    Maneja la lógica para agregar productos a un carrito temporal 
-    y para finalizar la compra con el proveedor.
-    """
     proveedor = get_object_or_404(Proveedor, id=idproveedor)
-    productos = Producto.objects.filter(activo=1)
     categorias = Categoria.objects.filter(activo=1)
+
+   
+    productos_maestros = Producto.objects.filter(
+        activo=1, 
+        codigo_barras='SIN_LOTE_CATALOGO' 
+    ).order_by('nombre_producto')
 
     if request.method == "POST":
         if 'finalizar_compra' in request.POST:
-            
-            return procesar_compra_final(request, proveedor)
+            return procesar_compra_final(request, proveedor) 
         elif 'agregar_producto' in request.POST:
-           
-            return agregar_al_carrito_compra(request, proveedor, productos, categorias)
-        
+          
+            return agregar_al_carrito_compra(request, proveedor.id, productos_maestros, categorias)
         
         messages.error(request, "Acción de formulario no reconocida.")
         return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
+    
+    
+    stock_consolidado_qs = Producto.objects.filter(
+        activo=1,
+        
+        nombre_producto__in=[p.nombre_producto for p in productos_maestros]
+    ).values(
+        'nombre_producto'
+    ).annotate(
+        stock_total=Sum('stock_actual')
+    )
+    
+    
+    stock_dict = {item['nombre_producto']: item['stock_total'] for item in stock_consolidado_qs}
 
+    
+    for p in productos_maestros:
+        
+        p.stock_actual = stock_dict.get(p.nombre_producto, 0)
 
   
+    
     carrito_key = f'carrito_compra_{proveedor.id}'
     carrito = request.session.get(carrito_key, [])
     
+    
+    try:
+        
+        subtotal_compra = sum(Decimal(str(item['subtotal'])) for item in carrito)
+        iva_compra = subtotal_compra * Decimal('0.19')
+        total_compra = subtotal_compra + iva_compra
+        
+        subtotal_compra = subtotal_compra.quantize(Decimal('0.01'))
+        iva_compra = iva_compra.quantize(Decimal('0.01'))
+        total_compra = total_compra.quantize(Decimal('0.01'))
+    except:
+        subtotal_compra = Decimal('0.00')
+        iva_compra = Decimal('0.00')
+        total_compra = Decimal('0.00')
 
-    subtotal_compra = sum(Decimal(str(item['subtotal'])) for item in carrito)
-    iva_compra = subtotal_compra * Decimal('0.19')
-    total_compra = subtotal_compra + iva_compra
 
     return render(request, "proveedor/crear_compra.html", {
         "proveedor": proveedor,
-        "productos": productos,
+        "productos": productos_maestros,  
         "categorias": categorias,
         "carrito": carrito,
         "subtotal_compra": subtotal_compra,
         "iva_compra": iva_compra,
         "total_compra": total_compra,
-    }) 
+    })
+
+
 
 
 @login_required
@@ -1307,6 +1647,77 @@ def listar_compras_proveedor(request):
     }
     
     return render(request, 'proveedor/listar_compras.html', context)
+
+@transaction.atomic
+def recibir_compra_pendiente(request, compra_id):
+    """
+    Cambia el estado de una Compra_proveedor de 'pendiente' a 'recibida'
+    y actualiza el stock y movimientos de inventario.
+    """
+    compra = get_object_or_404(Compra_proveedor, pk=compra_id)
+    
+
+    if compra.estado_compra == 'recibida':
+        messages.warning(request, f"La compra {compra.numero_factura_compra} ya fue recibida anteriormente.")
+        return redirect('detalle_compra_proveedor', compra_id=compra.id)
+
+    detalles = Compra_detalle.objects.filter(compra_idcompra=compra)
+    
+    if not detalles.exists():
+        messages.error(request, f"La compra {compra.numero_factura_compra} no tiene productos asociados.")
+        return redirect('detalle_compra_proveedor', compra_id=compra.id)
+    
+    try:
+       
+        for detalle in detalles:
+            producto = detalle.producto_idproducto
+            cantidad = detalle.cantidad
+            precio_unitario = detalle.precio_compra_unitario
+            subtotal_linea = detalle.subtotal_linea_compra
+            lote_detalle = detalle.lote
+            
+          
+            
+            stock_anterior = producto.stock_actual
+            
+         
+            producto.stock_actual += cantidad
+            producto.precio_compra = precio_unitario 
+            
+          
+            if producto.precio_venta > Decimal('0') and producto.precio_compra > Decimal('0'):
+                nuevo_margen = ((producto.precio_venta - producto.precio_compra) / producto.precio_compra) * Decimal('100.00')
+                producto.margen_ganancia = nuevo_margen.quantize(Decimal('0.01'))
+                
+            
+            producto.save() 
+            
+           
+            Movimiento_inventario.objects.create(
+                producto_idproducto=producto, 
+                tipo_movimiento='compra',
+                cantidad=cantidad,
+                stock_anterior=stock_anterior,
+                stock_nuevo=producto.stock_actual,
+                precio_unitario=precio_unitario,
+                valor_total=subtotal_linea,
+                referencia_id=compra.pk,
+                tipo_referencia='compra',
+                observaciones=f"Entrada por recepción de compra pendiente {compra.numero_factura_compra}. Lote: {lote_detalle}",
+                imagen_comprobante="",
+                usuarios_id_usuario=request.user 
+            )
+            
+     
+        compra.estado_compra = 'recibida'
+        compra.save()
+        
+        messages.success(request, f"La compra {compra.numero_factura_compra} ha sido marcada como 'Recibida' y el inventario actualizado.")
+        return redirect('detalle_compra_proveedor', compra_id=compra.id)
+
+    except Exception as e:
+        messages.error(request, f'Error al procesar la recepción de la compra {compra.numero_factura_compra}. Detalles: {str(e)}')
+        return redirect('detalle_compra_proveedor', compra_id=compra.id)
 
 #PROVEEDOR
 

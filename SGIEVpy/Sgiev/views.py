@@ -1184,12 +1184,15 @@ def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
 
     tipo = request.POST.get("tipo_producto")
 
+  
     try:
         cantidad = int(request.POST.get("cantidad", "0"))
         precio_compra_unitario = Decimal(request.POST.get("valor_unitario") or "0") 
         lote_detalle = request.POST.get("lote") 
         fecha_vencimiento = request.POST.get("fecha_vencimiento") or None
-        descripcion_producto = request.POST.get('descripcion_producto', '') 
+        
+        
+        descripcion_producto = request.POST.get('descripcion_producto', '').strip() 
         
         if cantidad <= 0 or precio_compra_unitario <= Decimal('0') or not lote_detalle:
             messages.error(request, "Cantidad, Precio Unitario y Lote son obligatorios y deben ser válidos.")
@@ -1204,9 +1207,10 @@ def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
     nombre_producto_en_carrito = ""
     precio_venta = Decimal('0.00')
 
+    
     if tipo == "nuevo":
         
-        nombre_producto = request.POST.get('nombre_producto')
+        nombre_producto = request.POST.get('nombre_producto').strip() 
         categoria_id = request.POST.get('categoria')
         
         precio_venta_post = request.POST.get('precio_venta')
@@ -1218,18 +1222,34 @@ def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
             return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
         
         
+        if Producto.objects.filter(
+            nombre_producto__iexact=nombre_producto,
+            descripcion_producto__iexact=descripcion_producto,
+            codigo_barras='SIN_LOTE_CATALOGO'
+        ).exists():
+             messages.error(request, f"El producto '{nombre_producto}' con esa descripción ya existe en el catálogo. Use la opción 'Existente'.")
+             return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
+        
         producto_id_en_carrito = 0
         nombre_producto_en_carrito = nombre_producto
-        
     
+   
     elif tipo == "existente":
         producto_id_post = request.POST.get("producto_id")
         
-        producto_existente_obj = get_object_or_404(Producto, id=producto_id_post, codigo_barras='SIN_LOTE_CATALOGO')
+       
+        producto_existente_obj = get_object_or_404(Producto, id=producto_id_post) 
+        
+        
+        if producto_existente_obj.codigo_barras != 'SIN_LOTE_CATALOGO':
+            messages.error(request, "Error: El ID seleccionado no corresponde a un producto maestro (catálogo).")
+            return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
+      
         
         producto_id_en_carrito = producto_existente_obj.id
         nombre_producto_en_carrito = producto_existente_obj.nombre_producto
         categoria_id_en_carrito = producto_existente_obj.categoria_idcategoria.id
+        descripcion_producto = producto_existente_obj.descripcion_producto 
         
         precio_venta_post = request.POST.get('precio_venta')
         precio_venta = Decimal(precio_venta_post or str(producto_existente_obj.precio_venta))
@@ -1238,12 +1258,10 @@ def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
         messages.error(request, "Tipo de producto no válido.")
         return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
 
-
-
+ 
     carrito_key = f'carrito_compra_{proveedor.id}'
     carrito = request.session.get(carrito_key, [])
     subtotal_linea = cantidad * precio_compra_unitario
-    
     
     nuevo_item = {
         'temp_id': str(uuid4()), 
@@ -1258,17 +1276,17 @@ def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
         'categoria_id': categoria_id_en_carrito if categoria_id_en_carrito else None,
         
         'datos_nuevo_maestro': {
-            'precio_venta': float(precio_venta) if tipo == 'nuevo' else None, 
-            'registro_sanitario': request.POST.get('registrosaniario', '') if tipo == 'nuevo' else None,
-            'stock_minimo': int(request.POST.get('stock_minimo') or 1) if tipo == 'nuevo' else None,
-            'stock_maximo': int(request.POST.get('stock_maximo') or 1000) if tipo == 'nuevo' else None,
-            'descripcion_producto': descripcion_producto if tipo == 'nuevo' else None,
-            
-        } if tipo == 'nuevo' else None
+            'precio_venta': float(precio_venta), 
+            'registro_sanitario': request.POST.get('registrosaniario', ''),
+            'stock_minimo': int(request.POST.get('stock_minimo') or 1),
+            'stock_maximo': int(request.POST.get('stock_maximo') or 1000),
+            'descripcion_producto': descripcion_producto, 
+        }
     }
     
     carrito.append(nuevo_item)
-    
+    request.session[carrito_key] = carrito
+    request.session.modified = True
     
     messages.success(request, f'Producto añadido a la lista: {nombre_producto_en_carrito}')
     return redirect('crear_compra_proveedor', idproveedor=proveedor.id)

@@ -251,9 +251,7 @@ def inicio_cat(request):
     return render(request, 'categoria/index.html')
 
 
-from django.core.paginator import Paginator
-from django.shortcuts import render
-from .models import Categoria
+
 
 def list_categoria(request):
     search = request.GET.get('search', '')
@@ -1915,28 +1913,51 @@ def usuarios_listar(request):
     return render(request, 'usuarios/listar.html', context)
 
 
+from django.core.mail import send_mail
+from django.conf import settings
+
 @admin_required
 def usuarios_crear(request):
     """
-    Crear un nuevo usuario
+    Crear un nuevo usuario y enviarle notificación por correo.
     """
     if request.method == 'POST':
         form = UsuarioForm(request.POST)
         if form.is_valid():
-            form.save()
+
+            usuario = form.save()  # guardar usuario
+
+            # Enviar correo al nuevo usuario (si tiene correo)
+            if usuario.correo:
+                try:
+                    send_mail(
+                        subject='Tu usuario ha sido creado - Romar Natural',
+                        message=(
+                            f'Hola {usuario.nombre_completo},\n\n'
+                            f'Tu usuario ha sido creado en el sistema Romar Natural.\n'
+                            f'Correo registrado: {usuario.correo}\n\n'
+                            f'Si no esperabas este mensaje, contacta con el administrador.'
+                        ),
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=[usuario.correo],
+                        fail_silently=False,
+                    )
+                except Exception as e:
+                    print("ERROR EMAIL USUARIO:", e)
+                    messages.error(request, f'No se pudo enviar el correo: {e}')
+
             messages.success(request, 'Usuario creado exitosamente')
             return redirect('usuarios_listar')
     else:
         form = UsuarioForm()
-    
+
     context = {
         'form': form,
         'titulo': 'Crear Usuario',
-        'usuario': request.user
+        'usuario': request.user,
     }
-    
-    return render(request, 'usuarios/crear.html', context)
 
+    return render(request, 'usuarios/crear.html', context)
 
 @admin_required
 def usuarios_editar(request, id):
@@ -2185,9 +2206,19 @@ def ventas_limpiar_carrito(request):
 def procesar_venta(request):
     """
     Procesa la venta final con validación de abono mínimo y estado automático,
-    descontando stock por lotes (FIFO) a partir el producto maestro.
-    Incluye datos de cliente.
+    descontando stock por lotes (FIFO) a partir del producto maestro.
+    Incluye datos de cliente y envío de correos con PDF adjunto.
     """
+    from django.core.mail import EmailMessage
+    from django.conf import settings
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    from io import BytesIO
+    
     venta_form = VentaForm(request.POST)
     carrito = request.session.get('carrito_venta', [])
 
@@ -2205,7 +2236,7 @@ def procesar_venta(request):
             abono = venta_form.cleaned_data['abono'] or Decimal('0')
 
             # ===== VALIDACIÓN DE ABONO MÍNIMO =====
-            abono_minimo = valor_total * Decimal('0.10')  # 10% del total
+            abono_minimo = valor_total * Decimal('0.10')
 
             if abono > 0 and abono < abono_minimo:
                 messages.error(
@@ -2220,7 +2251,7 @@ def procesar_venta(request):
                 estado_pago = 'pendiente'
             elif abono >= valor_total:
                 estado_pago = 'pagado'
-                abono = valor_total  # Ajustar si pagó de más
+                abono = valor_total
             else:
                 estado_pago = 'parcial'
 
@@ -2228,8 +2259,6 @@ def procesar_venta(request):
 
             # ===== CREAR VENTA =====
             venta = venta_form.save(commit=False)
-            # (nombre_cliente, correo_cliente, telefono_cliente, direccion_cliente
-            # vienen ya en venta por el form)
             venta.subtotal = subtotal
             venta.iva = iva
             venta.valor_total = valor_total
@@ -2240,17 +2269,13 @@ def procesar_venta(request):
             venta.imagen_recibo = ''
             venta.save()
 
-            # Lista para productos con stock bajo
             productos_stock_bajo = []
 
             # ===== PROCESAR CADA PRODUCTO DEL CARRITO (FIFO POR LOTES) =====
             for item in carrito:
-                # producto_id en el carrito es el maestro (SIN_LOTE_CATALOGO)
                 producto_maestro = Producto.objects.get(id=item['producto_id'])
                 cantidad_a_vender = item['cantidad']
 
-                # Obtener todos los lotes reales (incluye maestro si tiene stock),
-                # ordenados por fecha de vencimiento (FIFO)
                 lotes = Producto.objects.filter(
                     nombre_producto=producto_maestro.nombre_producto,
                     descripcion_producto=producto_maestro.descripcion_producto,
@@ -2261,7 +2286,6 @@ def procesar_venta(request):
                 if stock_total_disponible < cantidad_a_vender:
                     raise Exception(f'Stock insuficiente para {producto_maestro.nombre_producto}')
 
-                # Crear detalle de venta asociado al maestro (una sola línea)
                 Venta_has_producto.objects.create(
                     venta_idfactura=venta,
                     producto_idproducto=producto_maestro,
@@ -2270,7 +2294,6 @@ def procesar_venta(request):
                     subtotal_linea=Decimal(str(item['subtotal']))
                 )
 
-                # Descontar FIFO por lotes y registrar movimientos
                 restante = cantidad_a_vender
                 for lote in lotes:
                     if restante <= 0:
@@ -2284,7 +2307,6 @@ def procesar_venta(request):
                     lote.stock_actual -= tomar
                     lote.save()
 
-                    # Verificar stock bajo por lote
                     if lote.stock_actual <= lote.stock_minimo:
                         productos_stock_bajo.append({
                             'nombre': lote.nombre_producto,
@@ -2292,7 +2314,6 @@ def procesar_venta(request):
                             'stock_minimo': lote.stock_minimo
                         })
 
-                    # Registrar movimiento de inventario por lote
                     Movimiento_inventario.objects.create(
                         tipo_movimiento='venta',
                         cantidad=tomar,
@@ -2314,6 +2335,151 @@ def procesar_venta(request):
             request.session['carrito_venta'] = []
             request.session.modified = True
 
+            # ===== GENERAR PDF EN MEMORIA =====
+            productos_venta = Venta_has_producto.objects.filter(venta_idfactura=venta)
+            
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=letter)
+            elements = []
+
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                textColor=colors.HexColor('#3d862e'),
+                alignment=TA_CENTER
+            )
+
+            elements.append(Paragraph("ROMAR NATURAL", title_style))
+            elements.append(Paragraph("NIT: 52101085", styles['Normal']))
+            elements.append(Paragraph("Teléfono: 3053615676", styles['Normal']))
+            elements.append(Spacer(1, 0.3 * inch))
+
+            elements.append(Paragraph(f"<b>FACTURA: {venta.numero_factura}</b>", styles['Heading2']))
+            elements.append(Paragraph(f"Fecha: {venta.fecha_factura.strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+            elements.append(Paragraph(f"Vendedor: {venta.usuarios_id_usuario.nombre_completo}", styles['Normal']))
+
+            if venta.nombre_cliente or venta.correo_cliente or venta.direccion_cliente:
+                elements.append(Spacer(1, 0.2 * inch))
+                elements.append(Paragraph("<b>Datos del Cliente</b>", styles['Heading3']))
+                if venta.nombre_cliente:
+                    elements.append(Paragraph(f"Nombre: {venta.nombre_cliente}", styles['Normal']))
+                if venta.correo_cliente:
+                    elements.append(Paragraph(f"Correo: {venta.correo_cliente}", styles['Normal']))
+                if venta.telefono_cliente:
+                    elements.append(Paragraph(f"Teléfono: {venta.telefono_cliente}", styles['Normal']))
+                if venta.direccion_cliente:
+                    elements.append(Paragraph(f"Dirección: {venta.direccion_cliente}", styles['Normal']))
+
+            elements.append(Spacer(1, 0.3 * inch))
+
+            data = [['#', 'Producto', 'Cant.', 'Precio Unit.', 'Subtotal']]
+            for idx, item in enumerate(productos_venta, 1):
+                data.append([
+                    str(idx),
+                    item.producto_idproducto.nombre_producto[:30],
+                    str(item.cantidad),
+                    f"${item.valor_unitario:,.0f}",
+                    f"${item.subtotal_linea:,.0f}",
+                ])
+
+            table = Table(data, colWidths=[0.5 * inch, 3 * inch, 0.8 * inch, 1.2 * inch, 1.2 * inch])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3d862e')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+
+            elements.append(table)
+            elements.append(Spacer(1, 0.3 * inch))
+
+            totales_data = [
+                ['Subtotal:', f"${venta.subtotal:,.0f}"],
+                ['Descuento:', f"-${venta.descuento:,.0f}"],
+                ['IVA (19%):', f"${venta.iva:,.0f}"],
+                ['<b>TOTAL:</b>', f"<b>${venta.valor_total:,.0f}</b>"],
+            ]
+
+            if venta.abono > 0:
+                totales_data.append(['Abono:', f"${venta.abono:,.0f}"])
+                totales_data.append(['<b>Saldo Pendiente:</b>', f"<b>${venta.saldo_pendiente:,.0f}</b>"])
+
+            totales_table = Table(totales_data, colWidths=[3 * inch, 2 * inch])
+            totales_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, -1), (-1, -1), 14),
+                ('LINEABOVE', (0, -2), (-1, -2), 2, colors.black),
+            ]))
+
+            elements.append(totales_table)
+            elements.append(Spacer(1, 0.5 * inch))
+
+            elements.append(Paragraph(f"<b>Método de Pago:</b> {venta.get_metodo_pago_display()}", styles['Normal']))
+            elements.append(Paragraph(f"<b>Estado:</b> {venta.get_estado_pago_display()}", styles['Normal']))
+
+            if venta.observaciones:
+                elements.append(Spacer(1, 0.2 * inch))
+                elements.append(Paragraph(f"<b>Observaciones:</b> {venta.observaciones}", styles['Normal']))
+
+            elements.append(Spacer(1, 0.5 * inch))
+            elements.append(Paragraph("Gracias por su compra", styles['Normal']))
+
+            doc.build(elements)
+            pdf_content = buffer.getvalue()
+            buffer.close()
+
+            # ===== ENVIAR CORREO AL CLIENTE =====
+            if venta.correo_cliente:
+                try:
+                    email_cliente = EmailMessage(
+                        subject=f'Venta registrada - {venta.numero_factura}',
+                        body=(
+                            f'Hola {venta.nombre_cliente},\n\n'
+                            f'Tu compra ha sido registrada exitosamente.\n'
+                            f'Factura: {venta.numero_factura}\n'
+                            f'Total: ${venta.valor_total:,.0f}\n\n'
+                            f'Pronto tu pedido entrará en proceso de envío.\n'
+                            f'Adjuntamos tu factura en formato PDF.\n\n'
+                            f'Gracias por tu compra.\n\n'
+                            f'Romar Natural'
+                        ),
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        to=[venta.correo_cliente],
+                    )
+                    email_cliente.attach(f'Factura_{venta.numero_factura}.pdf', pdf_content, 'application/pdf')
+                    email_cliente.send(fail_silently=True)
+                except Exception:
+                    pass
+
+            # ===== ENVIAR CORREO AL VENDEDOR =====
+            if venta.usuarios_id_usuario.correo:
+                try:
+                    email_vendedor = EmailMessage(
+                        subject=f'Venta registrada exitosamente - {venta.numero_factura}',
+                        body=(
+                            f'Hola {venta.usuarios_id_usuario.nombre_completo},\n\n'
+                            f'La venta {venta.numero_factura} ha sido registrada exitosamente.\n'
+                            f'Cliente: {venta.nombre_cliente or "N/A"}\n'
+                            f'Total: ${venta.valor_total:,.0f}\n\n'
+                            f'Por favor, realiza la asignación del envío lo más pronto posible.\n'
+                            f'Adjuntamos la factura en formato PDF.\n\n'
+                            f'Romar Natural'
+                        ),
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        to=[venta.usuarios_id_usuario.correo],
+                    )
+                    email_vendedor.attach(f'Factura_{venta.numero_factura}.pdf', pdf_content, 'application/pdf')
+                    email_vendedor.send(fail_silently=True)
+                except Exception:
+                    pass
+
             # ===== MENSAJES DE ÉXITO =====
             estado_texto = {
                 'pendiente': 'PENDIENTE',
@@ -2326,7 +2492,6 @@ def procesar_venta(request):
                 f'Estado: {estado_texto[estado_pago]}'
             )
 
-            # Alertar sobre productos con stock bajo
             if productos_stock_bajo:
                 for prod in productos_stock_bajo:
                     messages.warning(
@@ -2756,8 +2921,18 @@ def envios_listar(request):
 @login_required(login_url='login')
 def envios_crear(request):
     """
-    Crear nuevo envío
+    Crear nuevo envío y notificar por correo
     """
+    from django.core.mail import EmailMessage
+    from django.conf import settings
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    from io import BytesIO
+    
     venta_id = request.GET.get('venta_id', None)
 
     if request.method == 'POST':
@@ -2766,6 +2941,170 @@ def envios_crear(request):
             envio = form.save(commit=False)
             envio.usuarios_id_usuario = request.user
             envio.save()
+            
+            # ===== GENERAR PDF DE LA FACTURA =====
+            venta = envio.venta_idfactura
+            productos_venta = Venta_has_producto.objects.filter(venta_idfactura=venta)
+            
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=letter)
+            elements = []
+
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                textColor=colors.HexColor('#3d862e'),
+                alignment=TA_CENTER
+            )
+
+            elements.append(Paragraph("ROMAR NATURAL", title_style))
+            elements.append(Paragraph("NIT: 52101085", styles['Normal']))
+            elements.append(Paragraph("Teléfono: 3053615676", styles['Normal']))
+            elements.append(Spacer(1, 0.3 * inch))
+
+            elements.append(Paragraph(f"<b>FACTURA: {venta.numero_factura}</b>", styles['Heading2']))
+            elements.append(Paragraph(f"Fecha: {venta.fecha_factura.strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+            elements.append(Paragraph(f"Vendedor: {venta.usuarios_id_usuario.nombre_completo}", styles['Normal']))
+
+            if venta.nombre_cliente or venta.correo_cliente or venta.direccion_cliente:
+                elements.append(Spacer(1, 0.2 * inch))
+                elements.append(Paragraph("<b>Datos del Cliente</b>", styles['Heading3']))
+                if venta.nombre_cliente:
+                    elements.append(Paragraph(f"Nombre: {venta.nombre_cliente}", styles['Normal']))
+                if venta.correo_cliente:
+                    elements.append(Paragraph(f"Correo: {venta.correo_cliente}", styles['Normal']))
+                if venta.telefono_cliente:
+                    elements.append(Paragraph(f"Teléfono: {venta.telefono_cliente}", styles['Normal']))
+                if venta.direccion_cliente:
+                    elements.append(Paragraph(f"Dirección: {venta.direccion_cliente}", styles['Normal']))
+
+            elements.append(Spacer(1, 0.3 * inch))
+
+            data = [['#', 'Producto', 'Cant.', 'Precio Unit.', 'Subtotal']]
+            for idx, item in enumerate(productos_venta, 1):
+                data.append([
+                    str(idx),
+                    item.producto_idproducto.nombre_producto[:30],
+                    str(item.cantidad),
+                    f"${item.valor_unitario:,.0f}",
+                    f"${item.subtotal_linea:,.0f}",
+                ])
+
+            table = Table(data, colWidths=[0.5 * inch, 3 * inch, 0.8 * inch, 1.2 * inch, 1.2 * inch])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3d862e')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+
+            elements.append(table)
+            elements.append(Spacer(1, 0.3 * inch))
+
+            totales_data = [
+                ['Subtotal:', f"${venta.subtotal:,.0f}"],
+                ['Descuento:', f"-${venta.descuento:,.0f}"],
+                ['IVA (19%):', f"${venta.iva:,.0f}"],
+                ['<b>TOTAL:</b>', f"<b>${venta.valor_total:,.0f}</b>"],
+            ]
+
+            if venta.abono > 0:
+                totales_data.append(['Abono:', f"${venta.abono:,.0f}"])
+                totales_data.append(['<b>Saldo Pendiente:</b>', f"<b>${venta.saldo_pendiente:,.0f}</b>"])
+
+            totales_table = Table(totales_data, colWidths=[3 * inch, 2 * inch])
+            totales_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, -1), (-1, -1), 14),
+                ('LINEABOVE', (0, -2), (-1, -2), 2, colors.black),
+            ]))
+
+            elements.append(totales_table)
+            elements.append(Spacer(1, 0.5 * inch))
+
+            elements.append(Paragraph(f"<b>Método de Pago:</b> {venta.get_metodo_pago_display()}", styles['Normal']))
+            elements.append(Paragraph(f"<b>Estado:</b> {venta.get_estado_pago_display()}", styles['Normal']))
+
+            if venta.observaciones:
+                elements.append(Spacer(1, 0.2 * inch))
+                elements.append(Paragraph(f"<b>Observaciones:</b> {venta.observaciones}", styles['Normal']))
+
+            elements.append(Spacer(1, 0.5 * inch))
+            elements.append(Paragraph("Gracias por su compra", styles['Normal']))
+
+            doc.build(elements)
+            pdf_content = buffer.getvalue()
+            buffer.close()
+
+            # Mapeo de estados a texto amigable
+            estados_texto = {
+                'pendiente': 'Pendiente de envío',
+                'en_transito': 'En tránsito',
+                'entregado': 'Entregado',
+                'devuelto': 'Devuelto'
+            }
+            estado_display = estados_texto.get(envio.estado_envio, envio.estado_envio)
+
+            # ===== ENVIAR CORREO AL CLIENTE =====
+            if venta.correo_cliente:
+                try:
+                    email_cliente = EmailMessage(
+                        subject=f'Estado de tu envío - {venta.numero_factura}',
+                        body=(
+                            f'Hola {venta.nombre_cliente},\n\n'
+                            f'Tu pedido ha sido registrado para envío.\n\n'
+                            f'Estado actual: {estado_display}\n'
+                            f'Factura: {venta.numero_factura}\n'
+                            f'Fecha de envío: {envio.fecha_envio.strftime("%d/%m/%Y")}\n'
+                            f'Fecha estimada de entrega: {envio.fecha_entrega.strftime("%d/%m/%Y")}\n'
+                            f'Dirección de entrega: {envio.direccion_envio}\n'
+                            f'Empresa de mensajería: {envio.fk_mensajeria.nombre_mensajeria}\n\n'
+                            f'Adjuntamos tu factura en formato PDF.\n\n'
+                            f'Gracias por tu preferencia.\n\n'
+                            f'Romar Natural'
+                        ),
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        to=[venta.correo_cliente],
+                    )
+                    email_cliente.attach(f'Factura_{venta.numero_factura}.pdf', pdf_content, 'application/pdf')
+                    email_cliente.send(fail_silently=True)
+                except Exception:
+                    pass
+
+            # ===== ENVIAR CORREO AL RESPONSABLE DEL ENVÍO =====
+            if envio.usuarios_id_usuario.correo:
+                try:
+                    email_responsable = EmailMessage(
+                        subject=f'Envío asignado - {venta.numero_factura}',
+                        body=(
+                            f'Hola {envio.usuarios_id_usuario.nombre_completo},\n\n'
+                            f'Se ha registrado un nuevo envío bajo tu responsabilidad.\n\n'
+                            f'Factura: {venta.numero_factura}\n'
+                            f'Cliente: {venta.nombre_cliente or "N/A"}\n'
+                            f'Estado actual: {estado_display}\n'
+                            f'Fecha de envío: {envio.fecha_envio.strftime("%d/%m/%Y")}\n'
+                            f'Fecha estimada de entrega: {envio.fecha_entrega.strftime("%d/%m/%Y")}\n'
+                            f'Dirección: {envio.direccion_envio}\n\n'
+                            f'RECORDATORIO: Por favor actualiza el estado del envío según avance el proceso.\n'
+                            f'Accede al sistema para registrar novedades o cambios de estado.\n\n'
+                            f'Adjuntamos la factura en formato PDF.\n\n'
+                            f'Romar Natural'
+                        ),
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        to=[envio.usuarios_id_usuario.correo],
+                    )
+                    email_responsable.attach(f'Factura_{venta.numero_factura}.pdf', pdf_content, 'application/pdf')
+                    email_responsable.send(fail_silently=True)
+                except Exception:
+                    pass
+
             messages.success(
                 request,
                 f'Envío registrado exitosamente para la venta {envio.venta_idfactura.numero_factura}'
@@ -2776,7 +3115,6 @@ def envios_crear(request):
             try:
                 venta = Venta.objects.get(id=venta_id)
 
-                # Verificar que no tenga envío ya asociado
                 if Envio.objects.filter(venta_idfactura=venta).exists():
                     messages.warning(
                         request,
@@ -2784,7 +3122,6 @@ def envios_crear(request):
                     )
                     return redirect('ventas_listar')
 
-                # Inicializar venta y dirección con los datos de la venta/cliente
                 initial_data = {
                     'venta_idfactura': venta,
                     'direccion_envio': venta.direccion_cliente or '',
@@ -2808,26 +3145,202 @@ def envios_crear(request):
 @login_required(login_url='login')
 def envios_editar(request, id):
     """
-    Editar envío existente
+    Editar envío existente y notificar cambios
     Admin: puede editar todo
     Operario: solo puede editar estado y novedades
     """
+    from django.core.mail import EmailMessage
+    from django.conf import settings
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    from io import BytesIO
+    
     envio = get_object_or_404(Envio, pk=id)
     es_admin = request.user.tipo_usu == 'administrador'
 
     if request.method == 'POST':
+        # Guardar estado anterior para detectar cambios
+        estado_anterior = envio.estado_envio
+        
         if es_admin:
             form = EnvioForm(request.POST, instance=envio)
         else:
             form = EnvioEditarOperarioForm(request.POST, instance=envio)
 
         if form.is_valid():
-            form.save()
+            envio = form.save()
+            
+            # Detectar si cambió el estado
+            estado_cambio = estado_anterior != envio.estado_envio
+            
+            if estado_cambio:
+                # ===== GENERAR PDF DE LA FACTURA =====
+                venta = envio.venta_idfactura
+                productos_venta = Venta_has_producto.objects.filter(venta_idfactura=venta)
+                
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=letter)
+                elements = []
+
+                styles = getSampleStyleSheet()
+                title_style = ParagraphStyle(
+                    'CustomTitle',
+                    parent=styles['Heading1'],
+                    fontSize=24,
+                    textColor=colors.HexColor('#3d862e'),
+                    alignment=TA_CENTER
+                )
+
+                elements.append(Paragraph("ROMAR NATURAL", title_style))
+                elements.append(Paragraph("NIT: 52101085", styles['Normal']))
+                elements.append(Paragraph("Teléfono: 3053615676", styles['Normal']))
+                elements.append(Spacer(1, 0.3 * inch))
+
+                elements.append(Paragraph(f"<b>FACTURA: {venta.numero_factura}</b>", styles['Heading2']))
+                elements.append(Paragraph(f"Fecha: {venta.fecha_factura.strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+                elements.append(Paragraph(f"Vendedor: {venta.usuarios_id_usuario.nombre_completo}", styles['Normal']))
+
+                if venta.nombre_cliente or venta.correo_cliente or venta.direccion_cliente:
+                    elements.append(Spacer(1, 0.2 * inch))
+                    elements.append(Paragraph("<b>Datos del Cliente</b>", styles['Heading3']))
+                    if venta.nombre_cliente:
+                        elements.append(Paragraph(f"Nombre: {venta.nombre_cliente}", styles['Normal']))
+                    if venta.correo_cliente:
+                        elements.append(Paragraph(f"Correo: {venta.correo_cliente}", styles['Normal']))
+                    if venta.telefono_cliente:
+                        elements.append(Paragraph(f"Teléfono: {venta.telefono_cliente}", styles['Normal']))
+                    if venta.direccion_cliente:
+                        elements.append(Paragraph(f"Dirección: {venta.direccion_cliente}", styles['Normal']))
+
+                elements.append(Spacer(1, 0.3 * inch))
+
+                data = [['#', 'Producto', 'Cant.', 'Precio Unit.', 'Subtotal']]
+                for idx, item in enumerate(productos_venta, 1):
+                    data.append([
+                        str(idx),
+                        item.producto_idproducto.nombre_producto[:30],
+                        str(item.cantidad),
+                        f"${item.valor_unitario:,.0f}",
+                        f"${item.subtotal_linea:,.0f}",
+                    ])
+
+                table = Table(data, colWidths=[0.5 * inch, 3 * inch, 0.8 * inch, 1.2 * inch, 1.2 * inch])
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3d862e')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 12),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ]))
+
+                elements.append(table)
+                elements.append(Spacer(1, 0.3 * inch))
+
+                totales_data = [
+                    ['Subtotal:', f"${venta.subtotal:,.0f}"],
+                    ['Descuento:', f"-${venta.descuento:,.0f}"],
+                    ['IVA (19%):', f"${venta.iva:,.0f}"],
+                    ['<b>TOTAL:</b>', f"<b>${venta.valor_total:,.0f}</b>"],
+                ]
+
+                if venta.abono > 0:
+                    totales_data.append(['Abono:', f"${venta.abono:,.0f}"])
+                    totales_data.append(['<b>Saldo Pendiente:</b>', f"<b>${venta.saldo_pendiente:,.0f}</b>"])
+
+                totales_table = Table(totales_data, colWidths=[3 * inch, 2 * inch])
+                totales_table.setStyle(TableStyle([
+                    ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, -1), (-1, -1), 14),
+                    ('LINEABOVE', (0, -2), (-1, -2), 2, colors.black),
+                ]))
+
+                elements.append(totales_table)
+                elements.append(Spacer(1, 0.5 * inch))
+
+                elements.append(Paragraph(f"<b>Método de Pago:</b> {venta.get_metodo_pago_display()}", styles['Normal']))
+                elements.append(Paragraph(f"<b>Estado:</b> {venta.get_estado_pago_display()}", styles['Normal']))
+
+                if venta.observaciones:
+                    elements.append(Spacer(1, 0.2 * inch))
+                    elements.append(Paragraph(f"<b>Observaciones:</b> {venta.observaciones}", styles['Normal']))
+
+                elements.append(Spacer(1, 0.5 * inch))
+                elements.append(Paragraph("Gracias por su compra", styles['Normal']))
+
+                doc.build(elements)
+                pdf_content = buffer.getvalue()
+                buffer.close()
+
+                # Mapeo de estados
+                estados_texto = {
+                    'pendiente': 'Pendiente de envío',
+                    'en_transito': 'En tránsito',
+                    'entregado': 'Entregado',
+                    'devuelto': 'Devuelto'
+                }
+                estado_display = estados_texto.get(envio.estado_envio, envio.estado_envio)
+
+                # ===== ENVIAR CORREO AL CLIENTE =====
+                if venta.correo_cliente:
+                    try:
+                        email_cliente = EmailMessage(
+                            subject=f'Actualización de tu envío - {venta.numero_factura}',
+                            body=(
+                                f'Hola {venta.nombre_cliente},\n\n'
+                                f'El estado de tu envío ha sido actualizado.\n\n'
+                                f'Estado actual: {estado_display}\n'
+                                f'Factura: {venta.numero_factura}\n'
+                                f'Fecha estimada de entrega: {envio.fecha_entrega.strftime("%d/%m/%Y")}\n'
+                                f'Dirección de entrega: {envio.direccion_envio}\n\n'
+                                f'{f"Novedades: {envio.novedades}" if envio.novedades else ""}\n\n'
+                                f'Adjuntamos tu factura en formato PDF.\n\n'
+                                f'Gracias por tu preferencia.\n\n'
+                                f'Romar Natural'
+                            ),
+                            from_email=settings.DEFAULT_FROM_EMAIL,
+                            to=[venta.correo_cliente],
+                        )
+                        email_cliente.attach(f'Factura_{venta.numero_factura}.pdf', pdf_content, 'application/pdf')
+                        email_cliente.send(fail_silently=True)
+                    except Exception:
+                        pass
+
+                # ===== ENVIAR CORREO AL RESPONSABLE DEL ENVÍO =====
+                if envio.usuarios_id_usuario.correo:
+                    try:
+                        email_responsable = EmailMessage(
+                            subject=f'Estado actualizado - {venta.numero_factura}',
+                            body=(
+                                f'Hola {envio.usuarios_id_usuario.nombre_completo},\n\n'
+                                f'El estado del envío ha sido actualizado.\n\n'
+                                f'Factura: {venta.numero_factura}\n'
+                                f'Cliente: {venta.nombre_cliente or "N/A"}\n'
+                                f'Estado actual: {estado_display}\n'
+                                f'Fecha estimada de entrega: {envio.fecha_entrega.strftime("%d/%m/%Y")}\n\n'
+                                f'RECORDATORIO: Mantén actualizado el estado y registra cualquier novedad.\n\n'
+                                f'Adjuntamos la factura en formato PDF.\n\n'
+                                f'Romar Natural'
+                            ),
+                            from_email=settings.DEFAULT_FROM_EMAIL,
+                            to=[envio.usuarios_id_usuario.correo],
+                        )
+                        email_responsable.attach(f'Factura_{venta.numero_factura}.pdf', pdf_content, 'application/pdf')
+                        email_responsable.send(fail_silently=True)
+                    except Exception:
+                        pass
+
             messages.success(request, 'Envío actualizado exitosamente')
             return redirect('envios_detalle', id=envio.id)
     else:
         if es_admin:
-            # Inicializar dirección con la de la venta si el envío aún no tiene o quieres refrescarla
             initial_data = {}
             if not envio.direccion_envio and envio.venta_idfactura and envio.venta_idfactura.direccion_cliente:
                 initial_data['direccion_envio'] = envio.venta_idfactura.direccion_cliente

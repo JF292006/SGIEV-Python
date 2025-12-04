@@ -240,27 +240,57 @@ from .models import Venta, Producto, Usuarios
 
 class EditarEstadoVentaForm(forms.ModelForm):
     """
-    Formulario para que admin edite solo el estado de pago de una venta
+    Formulario para que admin edite el estado de pago
+    y la información básica del cliente.
     """
     class Meta:
         model = Venta
-        fields = ['estado_pago']
+        fields = [
+            'estado_pago',
+            'nombre_cliente',
+            'correo_cliente',
+            'telefono_cliente',
+            'direccion_cliente',
+        ]
 
         widgets = {
             'estado_pago': forms.Select(attrs={
                 'class': 'form-control',
                 'required': 'required'
-            })
+            }),
+            'nombre_cliente': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Nombre del cliente',
+                'required': 'required',
+            }),
+            'correo_cliente': forms.EmailInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'correo@cliente.com',
+                'required': 'required',
+            }),
+            'telefono_cliente': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Teléfono del cliente',
+            }),
+            'direccion_cliente': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Dirección del cliente',
+            }),
         }
 
         labels = {
-            'estado_pago': 'Estado de Pago'
+            'estado_pago': 'Estado de Pago',
+            'nombre_cliente': 'Nombre del Cliente',
+            'correo_cliente': 'Correo del Cliente',
+            'telefono_cliente': 'Teléfono del Cliente',
+            'direccion_cliente': 'Dirección del Cliente',
         }
 
 
 class VentaForm(forms.ModelForm):
     """
     Formulario para registrar ventas con validación de abono
+    e información del cliente.
     """
     class Meta:
         model = Venta
@@ -270,7 +300,11 @@ class VentaForm(forms.ModelForm):
             'metodo_pago',
             'estado_pago',
             'abono',
-            'observaciones'
+            'observaciones',
+            'nombre_cliente',
+            'correo_cliente',
+            'telefono_cliente',
+            'direccion_cliente',
         ]
 
         widgets = {
@@ -309,7 +343,25 @@ class VentaForm(forms.ModelForm):
                 'class': 'form-control',
                 'placeholder': 'Observaciones adicionales',
                 'rows': 3
-            })
+            }),
+            'nombre_cliente': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Nombre del cliente',
+                'required': 'required',
+            }),
+            'correo_cliente': forms.EmailInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'correo@cliente.com',
+                'required': 'required',
+            }),
+            'telefono_cliente': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Teléfono del cliente',
+            }),
+            'direccion_cliente': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Dirección del cliente',
+            }),
         }
 
         labels = {
@@ -318,7 +370,11 @@ class VentaForm(forms.ModelForm):
             'metodo_pago': 'Método de Pago',
             'estado_pago': 'Estado de Pago',
             'abono': 'Abono Inicial ($)',
-            'observaciones': 'Observaciones'
+            'observaciones': 'Observaciones',
+            'nombre_cliente': 'Nombre del Cliente',
+            'correo_cliente': 'Correo del Cliente',
+            'telefono_cliente': 'Teléfono del Cliente',
+            'direccion_cliente': 'Dirección del Cliente',
         }
 
     def __init__(self, *args, **kwargs):
@@ -334,7 +390,6 @@ class VentaForm(forms.ModelForm):
                     self.fields['numero_factura'].initial = 'FAC-00001'
             else:
                 self.fields['numero_factura'].initial = 'FAC-00001'
-
 
 class AgregarProductoForm(forms.Form):
     """

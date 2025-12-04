@@ -12,27 +12,21 @@
         border-bottom: 1px solid #dee2e6;
         padding: 15px 0;
     }
-    
     .carrito-item:last-child {
         border-bottom: none;
     }
-    
     .resumen-venta {
         position: sticky;
         top: 20px;
     }
-    
     .total-general {
         font-size: 1.5rem;
         font-weight: bold;
         color: var(--primary);
     }
-    
-    /* Estilo para Select2 */
     .select2-container--bootstrap4 .select2-selection {
         height: calc(1.5em + .75rem + 2px) !important;
     }
-    
     #abono-info {
         font-size: 0.85rem;
         margin-top: 5px;
@@ -185,7 +179,8 @@
                     <div class="card-body">
                         <form method="post" id="form-venta">
                             {% csrf_token %}
-                            
+
+                            <!-- Datos de factura / pago -->
                             <div class="form-group">
                                 <label>{{ venta_form.numero_factura.label }}</label>
                                 {{ venta_form.numero_factura }}
@@ -219,6 +214,31 @@
                             <div class="form-group">
                                 <label>{{ venta_form.observaciones.label }}</label>
                                 {{ venta_form.observaciones }}
+                            </div>
+
+                            <hr>
+
+                            <!-- Datos del cliente -->
+                            <h6 class="font-weight-bold mb-2"><i class="icon ion-md-person"></i> Datos del Cliente</h6>
+
+                            <div class="form-group">
+                                <label>{{ venta_form.nombre_cliente.label }}</label>
+                                {{ venta_form.nombre_cliente }}
+                            </div>
+
+                            <div class="form-group">
+                                <label>{{ venta_form.correo_cliente.label }}</label>
+                                {{ venta_form.correo_cliente }}
+                            </div>
+
+                            <div class="form-group">
+                                <label>{{ venta_form.telefono_cliente.label }}</label>
+                                {{ venta_form.telefono_cliente }}
+                            </div>
+
+                            <div class="form-group">
+                                <label>{{ venta_form.direccion_cliente.label }}</label>
+                                {{ venta_form.direccion_cliente }}
                             </div>
 
                             <hr>
@@ -272,15 +292,15 @@ function calcularTotales() {
     const abonoInput = document.getElementById('id_abono');
     const estadoPagoSelect = document.getElementById('id_estado_pago');
     const abonoMinimoText = document.getElementById('abono-minimo-text');
-    
+
     const descuento = parseFloat(descuentoInput.value) || 0;
     const iva = (subtotal - descuento) * 0.19;
     const total = subtotal - descuento + iva;
     const abono = parseFloat(abonoInput.value) || 0;
-    
+
     // Calcular abono mínimo (10%)
     const abonoMinimo = total * 0.10;
-    
+
     // Actualizar texto de abono mínimo
     if (abono > 0 && abono < total) {
         abonoMinimoText.innerHTML = `Mínimo: <strong>$${abonoMinimo.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}</strong> (10%)`;
@@ -288,7 +308,7 @@ function calcularTotales() {
     } else {
         abonoMinimoText.innerHTML = '';
     }
-    
+
     // Calcular estado de pago automáticamente
     let estadoPago = 'pendiente';
     if (abono == 0) {
@@ -298,10 +318,10 @@ function calcularTotales() {
     } else if (abono >= abonoMinimo) {
         estadoPago = 'parcial';
     }
-    
+
     // Actualizar select de estado
     estadoPagoSelect.value = estadoPago;
-    
+
     // Actualizar visualización de totales
     document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     document.getElementById('descuento').textContent = '$' + descuento.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -313,7 +333,7 @@ function calcularTotales() {
 document.addEventListener('DOMContentLoaded', function() {
     const descuentoInput = document.getElementById('id_descuento');
     const abonoInput = document.getElementById('id_abono');
-    
+
     if (descuentoInput && abonoInput) {
         descuentoInput.addEventListener('input', calcularTotales);
         abonoInput.addEventListener('input', calcularTotales);

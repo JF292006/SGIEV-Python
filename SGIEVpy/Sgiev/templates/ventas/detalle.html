@@ -10,24 +10,20 @@
         padding: 30px;
         border-radius: 10px 10px 0 0;
     }
-    
     .factura-body {
         background: white;
         padding: 30px;
     }
-    
     .info-box {
         background: #f8f9fa;
         padding: 15px;
         border-radius: 8px;
         margin-bottom: 15px;
     }
-    
     @media print {
         .no-print {
             display: none !important;
         }
-        
         #sidebar-container,
         nav,
         .breadcrumb {
@@ -53,34 +49,29 @@
                 </ol>
             </nav>
         </div>
-       <div class="col-md-4 text-right">
-    <!-- Botón Editar Estado (Solo Admin) -->
-    {% if es_admin %}
-    <a href="{% url 'ventas_editar_estado' venta.id %}" class="btn btn-warning">
-        <i class="icon ion-md-create"></i> Editar Estado
-    </a>
-    {% endif %}
-    
-    <!-- Botón Descargar PDF -->
-    <a href="{% url 'ventas_generar_pdf' venta.id %}" class="btn btn-success">
-        <i class="icon ion-md-download"></i> Descargar PDF
-    </a>
-    
-    <!-- Botón Eliminar (Solo Admin) -->
-    {% if es_admin %}
-    <a href="{% url 'ventas_eliminar' venta.id %}" 
-       class="btn btn-danger"
-       onclick="return confirm('⚠️ ¿ELIMINAR ESTA VENTA?\n\nFactura: {{ venta.numero_factura }}\nTotal: ${{ venta.valor_total|floatformat:0 }}\n\n✓ El stock será devuelto al inventario\n✓ Esta acción NO se puede deshacer\n\n¿Continuar?')">
-        <i class="icon ion-md-trash"></i> Eliminar Venta
-    </a>
-    {% endif %}
-    
-    <a href="{% url 'ventas_listar' %}" class="btn btn-secondary">
-        <i class="icon ion-md-arrow-back"></i> Volver
-    </a>
-</div>
+        <div class="col-md-4 text-right">
+            {% if es_admin %}
+            <a href="{% url 'ventas_editar_estado' venta.id %}" class="btn btn-warning">
+                <i class="icon ion-md-create"></i> Editar Estado / Cliente
+            </a>
+            {% endif %}
 
+            <a href="{% url 'ventas_generar_pdf' venta.id %}" class="btn btn-success">
+                <i class="icon ion-md-download"></i> Descargar PDF
+            </a>
 
+            {% if es_admin %}
+            <a href="{% url 'ventas_eliminar' venta.id %}"
+               class="btn btn-danger"
+               onclick="return confirm('⚠️ ¿ELIMINAR ESTA VENTA?\\n\\nFactura: {{ venta.numero_factura }}\\nTotal: ${{ venta.valor_total|floatformat:0 }}\\n\\n✓ El stock será devuelto al inventario\\n✓ Esta acción NO se puede deshacer\\n\\n¿Continuar?')">
+                <i class="icon ion-md-trash"></i> Eliminar Venta
+            </a>
+            {% endif %}
+
+            <a href="{% url 'ventas_listar' %}" class="btn btn-secondary">
+                <i class="icon ion-md-arrow-back"></i> Volver
+            </a>
+        </div>
     </div>
 </div>
 
@@ -107,18 +98,18 @@
         <div class="factura-body">
             <!-- Información general -->
             <div class="row mb-4">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="info-box">
                         <h6 class="font-weight-bold mb-2">Vendedor</h6>
                         <p class="mb-1">{{ venta.usuarios_id_usuario.nombre_completo }}</p>
                         <p class="mb-0 small text-muted">{{ venta.usuarios_id_usuario.correo }}</p>
                     </div>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="info-box">
                         <h6 class="font-weight-bold mb-2">Información de Pago</h6>
                         <p class="mb-1">
-                            <strong>Método:</strong> 
+                            <strong>Método:</strong>
                             <span class="badge badge-secondary">{{ venta.metodo_pago|title }}</span>
                         </p>
                         <p class="mb-0">
@@ -131,6 +122,26 @@
                                 <span class="badge badge-warning">Parcial</span>
                             {% endif %}
                         </p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="info-box">
+                        <h6 class="font-weight-bold mb-2">Datos del Cliente</h6>
+                        {% if venta.nombre_cliente %}
+                            <p class="mb-1"><strong>Nombre:</strong> {{ venta.nombre_cliente }}</p>
+                        {% endif %}
+                        {% if venta.correo_cliente %}
+                            <p class="mb-1"><strong>Correo:</strong> {{ venta.correo_cliente }}</p>
+                        {% endif %}
+                        {% if venta.telefono_cliente %}
+                            <p class="mb-1"><strong>Teléfono:</strong> {{ venta.telefono_cliente }}</p>
+                        {% endif %}
+                        {% if venta.direccion_cliente %}
+                            <p class="mb-0"><strong>Dirección:</strong> {{ venta.direccion_cliente }}</p>
+                        {% endif %}
+                        {% if not venta.nombre_cliente and not venta.correo_cliente and not venta.direccion_cliente %}
+                            <p class="mb-0 text-muted small">Sin datos de cliente registrados.</p>
+                        {% endif %}
                     </div>
                 </div>
             </div>

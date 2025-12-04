@@ -1,6 +1,6 @@
 {% extends 'ventas/base_ventas.html' %}
 
-{% block title %}Editar Estado - {{ venta.numero_factura }}{% endblock %}
+{% block title %}Editar Venta - {{ venta.numero_factura }}{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -8,14 +8,14 @@
     <div class="row mb-4">
         <div class="col-12">
             <h2 class="font-weight-bold">
-                <i class="icon ion-md-create"></i> Editar Estado de Venta
+                <i class="icon ion-md-create"></i> Editar Estado y Cliente
             </h2>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb bg-transparent p-0">
                     <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
                     <li class="breadcrumb-item"><a href="{% url 'ventas_listar' %}">Ventas</a></li>
                     <li class="breadcrumb-item"><a href="{% url 'ventas_detalle' venta.id %}">{{ venta.numero_factura }}</a></li>
-                    <li class="breadcrumb-item active">Editar Estado</li>
+                    <li class="breadcrumb-item active">Editar</li>
                 </ol>
             </nav>
         </div>
@@ -25,7 +25,9 @@
         <div class="col-lg-6 offset-lg-3">
             <div class="card">
                 <div class="card-header bg-warning text-white">
-                    <h5 class="mb-0"><i class="icon ion-md-document"></i> Cambiar Estado de Pago</h5>
+                    <h5 class="mb-0">
+                        <i class="icon ion-md-document"></i> Datos de la Venta
+                    </h5>
                 </div>
                 <div class="card-body">
                     <!-- Información de la venta -->
@@ -39,7 +41,8 @@
                     <!-- Formulario -->
                     <form method="post">
                         {% csrf_token %}
-                        
+
+                        <!-- Estado de pago -->
                         <div class="form-group">
                             <label>{{ form.estado_pago.label }}</label>
                             {{ form.estado_pago }}
@@ -51,12 +54,53 @@
 
                         <hr>
 
+                        <!-- Datos del cliente -->
+                        <h6 class="font-weight-bold mb-2">
+                            <i class="icon ion-md-person"></i> Datos del Cliente
+                        </h6>
+
+                        <div class="form-group">
+                            <label>{{ form.nombre_cliente.label }}</label>
+                            {{ form.nombre_cliente }}
+                            {% if form.nombre_cliente.errors %}
+                                <div class="text-danger small">{{ form.nombre_cliente.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label>{{ form.correo_cliente.label }}</label>
+                            {{ form.correo_cliente }}
+                            {% if form.correo_cliente.errors %}
+                                <div class="text-danger small">{{ form.correo_cliente.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label>{{ form.telefono_cliente.label }}</label>
+                            {{ form.telefono_cliente }}
+                            {% if form.telefono_cliente.errors %}
+                                <div class="text-danger small">{{ form.telefono_cliente.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label>{{ form.direccion_cliente.label }}</label>
+                            {{ form.direccion_cliente }}
+                            {% if form.direccion_cliente.errors %}
+                                <div class="text-danger small">{{ form.direccion_cliente.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <hr>
+
                         <div class="alert alert-warning">
-                            <i class="icon ion-md-warning"></i> <strong>Nota:</strong> Solo se puede modificar el estado de pago. Los demás datos de la venta no se pueden cambiar.
+                            <i class="icon ion-md-warning"></i>
+                            <strong>Nota:</strong> Solo se puede modificar el estado de pago y la información del cliente.
+                            Los demás datos de la venta no se pueden cambiar desde esta pantalla.
                         </div>
 
                         <button type="submit" class="btn btn-warning btn-block">
-                            <i class="icon ion-md-checkmark"></i> Actualizar Estado
+                            <i class="icon ion-md-checkmark"></i> Guardar Cambios
                         </button>
                         <a href="{% url 'ventas_detalle' venta.id %}" class="btn btn-secondary btn-block">
                             <i class="icon ion-md-arrow-back"></i> Cancelar

@@ -107,35 +107,45 @@ class Venta(models.Model):
     valor_total = models.DecimalField(max_digits=10, decimal_places=2)
     abono = models.DecimalField(max_digits=10, decimal_places=2)
     saldo_pendiente = models.DecimalField(max_digits=10, decimal_places=2)
+
     ESTADOS_PAGO = [
         ('pagado', 'Pagado'),
         ('pendiente', 'Pendiente'),
         ('parcial', 'Parcial'),
     ]
     estado_pago = models.CharField(max_length=20, choices=ESTADOS_PAGO, default='pagado')
+
     observaciones = models.TextField()
+
     ESTADOS_METPAGO = [
         ('efectivo', 'Efectivo'),
         ('tarjeta', 'Tarjeta'),
         ('transferencia', 'Transferencia'),
         ('mixto', 'Mixto')
     ]
-    metodo_pago = models.CharField(max_length=20, choices=ESTADOS_METPAGO, default = 'efectivo')
+    metodo_pago = models.CharField(max_length=20, choices=ESTADOS_METPAGO, default='efectivo')
+
     usuarios_id_usuario = models.ForeignKey(Usuarios, on_delete=models.CASCADE)
     imagen_recibo = models.CharField(max_length=255)
 
+    # === DATOS DEL CLIENTE ===
+    nombre_cliente = models.CharField(max_length=100, null=True, blank=True)
+    correo_cliente = models.CharField(max_length=100, null=True, blank=True)
+    telefono_cliente = models.CharField(max_length=20, null=True, blank=True)
+    direccion_cliente = models.CharField(max_length=150, null=True, blank=True)
+
 
 class Envio(models.Model):
-        estado_envio = models.CharField(max_length=15)
-        fecha_envio = models.DateField(null=False, blank=False)
-        fecha_entrega = models.DateField(null=False, blank=False)
-        direccion_envio = models.CharField(max_length=100)
-        direccion_salida = models.CharField(max_length=100)
-        observaciones = models.TextField()
-        novedades = models.TextField()
-        fk_mensajeria = models.ForeignKey(Mensajeria, on_delete=models.CASCADE)
-        usuarios_id_usuario = models.ForeignKey(Usuarios, on_delete=models.CASCADE)
-        venta_idfactura = models.ForeignKey(Venta, on_delete=models.CASCADE)
+    estado_envio = models.CharField(max_length=15)
+    fecha_envio = models.DateField(null=False, blank=False)
+    fecha_entrega = models.DateField(null=False, blank=False)
+    direccion_envio = models.CharField(max_length=100)
+    direccion_salida = models.CharField(max_length=100)
+    observaciones = models.TextField()
+    novedades = models.TextField()
+    fk_mensajeria = models.ForeignKey(Mensajeria, on_delete=models.CASCADE)
+    usuarios_id_usuario = models.ForeignKey(Usuarios, on_delete=models.CASCADE)
+    venta_idfactura = models.ForeignKey(Venta, on_delete=models.CASCADE)
 
 class Movimiento_inventario(models.Model):
      fecha_movimiento = models.DateTimeField(auto_now_add=True)

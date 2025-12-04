@@ -49,6 +49,11 @@ import json
 from django.db import IntegrityError, transaction
 
 
+
+
+
+
+
 def index(request):  
     """
     Vista principal - Landing page
@@ -2062,7 +2067,8 @@ def ventas_listar(request):
 @login_required(login_url='login')
 def ventas_crear(request):
     """
-    Crear nueva venta con sistema de carrito
+    Crear nueva venta con sistema de carrito.
+    Ahora también captura datos del cliente.
     """
     if request.method == 'POST':
         if 'finalizar_venta' in request.POST:
@@ -2071,27 +2077,28 @@ def ventas_crear(request):
         else:
             # Agregar producto al carrito
             return agregar_al_carrito(request)
-    
+
     # GET - Mostrar formulario
     venta_form = VentaForm()
     producto_form = AgregarProductoForm()
-    
+
     # Obtener carrito de la sesión
     carrito = request.session.get('carrito_venta', [])
-    
+
     # Calcular totales
     subtotal = sum(Decimal(str(item['subtotal'])) for item in carrito)
-    
+
     context = {
         'venta_form': venta_form,
         'producto_form': producto_form,
         'carrito': carrito,
         'subtotal': subtotal,
         'usuario': request.user,
-        'es_admin': request.user.tipo_usu == 'administrador'
+        'es_admin': request.user.tipo_usu == 'administrador',
     }
-    
+
     return render(request, 'ventas/crear.html', context)
+
 
 
 def agregar_al_carrito(request):
@@ -2099,14 +2106,14 @@ def agregar_al_carrito(request):
     Agrega un producto al carrito de la sesión
     """
     producto_form = AgregarProductoForm(request.POST)
-    
+
     if producto_form.is_valid():
         producto = producto_form.cleaned_data['producto']
         cantidad = producto_form.cleaned_data['cantidad']
-        
+
         # Obtener o crear carrito
         carrito = request.session.get('carrito_venta', [])
-        
+
         # Verificar si el producto ya está en el carrito
         producto_existente = False
         for item in carrito:
@@ -2123,7 +2130,7 @@ def agregar_al_carrito(request):
                     messages.error(request, f'Stock insuficiente para {producto.nombre_producto}')
                     return redirect('ventas_crear')
                 break
-        
+
         if not producto_existente:
             # Agregar nuevo producto
             carrito.append({
@@ -2133,18 +2140,19 @@ def agregar_al_carrito(request):
                 'cantidad': cantidad,
                 'subtotal': float(producto.precio_venta * cantidad),
                 'stock_disponible': producto.stock_actual,
-                'stock_minimo': producto.stock_minimo  # AGREGAR ESTO
+                'stock_minimo': producto.stock_minimo,
             })
             messages.success(request, f'Producto agregado: {producto.nombre_producto}')
-        
+
         # Guardar carrito en sesión
         request.session['carrito_venta'] = carrito
         request.session.modified = True
     else:
         for error in producto_form.errors.values():
             messages.error(request, error)
-    
+
     return redirect('ventas_crear')
+
 
 
 @login_required(login_url='login')
@@ -2177,7 +2185,8 @@ def ventas_limpiar_carrito(request):
 def procesar_venta(request):
     """
     Procesa la venta final con validación de abono mínimo y estado automático,
-    descontando stock por lotes (FIFO) a partir del producto maestro.
+    descontando stock por lotes (FIFO) a partir el producto maestro.
+    Incluye datos de cliente.
     """
     venta_form = VentaForm(request.POST)
     carrito = request.session.get('carrito_venta', [])
@@ -2219,12 +2228,14 @@ def procesar_venta(request):
 
             # ===== CREAR VENTA =====
             venta = venta_form.save(commit=False)
+            # (nombre_cliente, correo_cliente, telefono_cliente, direccion_cliente
+            # vienen ya en venta por el form)
             venta.subtotal = subtotal
             venta.iva = iva
             venta.valor_total = valor_total
             venta.abono = abono
             venta.saldo_pendiente = saldo_pendiente
-            venta.estado_pago = estado_pago  # Estado automático
+            venta.estado_pago = estado_pago
             venta.usuarios_id_usuario = request.user
             venta.imagen_recibo = ''
             venta.save()
@@ -2337,18 +2348,19 @@ def procesar_venta(request):
 @login_required(login_url='login')
 def ventas_detalle(request, id):
     """
-    Ver detalles completos de una venta (factura)
+    Ver detalles completos de una venta (factura),
+    incluyendo datos del cliente.
     """
     venta = get_object_or_404(Venta, pk=id)
     productos = Venta_has_producto.objects.filter(venta_idfactura=venta)
-    
+
     context = {
         'venta': venta,
         'productos': productos,
         'usuario': request.user,
-        'es_admin': request.user.tipo_usu == 'administrador'
-    }
-    
+        'es_admin': request.user.tipo_usu == 'administrador',
+         }
+
     return render(request, 'ventas/detalle.html', context)
 
 
@@ -2371,33 +2383,37 @@ def obtener_precio_producto(request, producto_id):
 @admin_required
 def ventas_editar_estado(request, id):
     """
-    Permite al administrador editar solo el estado de pago de una venta
+    Permite al administrador editar el estado de pago de una venta
+    y la información del cliente.
     """
     venta = get_object_or_404(Venta, pk=id)
-    
+
     if request.method == 'POST':
         form = EditarEstadoVentaForm(request.POST, instance=venta)
         if form.is_valid():
             form.save()
-            messages.success(request, f'Estado de la venta {venta.numero_factura} actualizado')
+            messages.success(
+                request,
+                f'Información de la venta {venta.numero_factura} actualizada correctamente'
+            )
             return redirect('ventas_detalle', id=venta.id)
     else:
         form = EditarEstadoVentaForm(instance=venta)
-    
+
     context = {
         'form': form,
         'venta': venta,
         'usuario': request.user,
-        'es_admin': True
+        'es_admin': True,
     }
-    
+
     return render(request, 'ventas/editar_estado.html', context)
 
 
 @login_required(login_url='login')
 def ventas_generar_pdf(request, id):
     """
-    Genera un PDF de la factura de venta
+    Genera un PDF de la factura de venta, incluyendo datos del cliente.
     """
     from reportlab.lib.pagesizes import letter
     from reportlab.lib import colors
@@ -2407,20 +2423,19 @@ def ventas_generar_pdf(request, id):
     from reportlab.lib.enums import TA_CENTER, TA_RIGHT
     from django.http import HttpResponse
     from io import BytesIO
-    
     # Obtener la venta
     venta = get_object_or_404(Venta, pk=id)
     productos = Venta_has_producto.objects.filter(venta_idfactura=venta)
-    
+
     # Crear el objeto HttpResponse con el tipo de contenido PDF
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="Factura_{venta.numero_factura}.pdf"'
-    
+
     # Crear el PDF
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     elements = []
-    
+
     # Estilos
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
@@ -2430,33 +2445,46 @@ def ventas_generar_pdf(request, id):
         textColor=colors.HexColor('#3d862e'),
         alignment=TA_CENTER
     )
-    
+
     # Título
     elements.append(Paragraph("ROMAR NATURAL", title_style))
     elements.append(Paragraph("NIT: 52101085", styles['Normal']))
     elements.append(Paragraph("Teléfono: 3053615676", styles['Normal']))
-    elements.append(Spacer(1, 0.3*inch))
-    
+    elements.append(Spacer(1, 0.3 * inch))
+
     # Información de la factura
     elements.append(Paragraph(f"<b>FACTURA: {venta.numero_factura}</b>", styles['Heading2']))
     elements.append(Paragraph(f"Fecha: {venta.fecha_factura.strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
     elements.append(Paragraph(f"Vendedor: {venta.usuarios_id_usuario.nombre_completo}", styles['Normal']))
-    elements.append(Spacer(1, 0.3*inch))
-    
+
+    # Información del cliente
+    if venta.nombre_cliente or venta.correo_cliente or venta.direccion_cliente:
+        elements.append(Spacer(1, 0.2 * inch))
+        elements.append(Paragraph("<b>Datos del Cliente</b>", styles['Heading3']))
+        if venta.nombre_cliente:
+            elements.append(Paragraph(f"Nombre: {venta.nombre_cliente}", styles['Normal']))
+        if venta.correo_cliente:
+            elements.append(Paragraph(f"Correo: {venta.correo_cliente}", styles['Normal']))
+        if venta.telefono_cliente:
+            elements.append(Paragraph(f"Teléfono: {venta.telefono_cliente}", styles['Normal']))
+        if venta.direccion_cliente:
+            elements.append(Paragraph(f"Dirección: {venta.direccion_cliente}", styles['Normal']))
+
+    elements.append(Spacer(1, 0.3 * inch))
+
     # Tabla de productos
     data = [['#', 'Producto', 'Cant.', 'Precio Unit.', 'Subtotal']]
-    
+
     for idx, item in enumerate(productos, 1):
         data.append([
             str(idx),
             item.producto_idproducto.nombre_producto[:30],
             str(item.cantidad),
             f"${item.valor_unitario:,.0f}",
-            f"${item.subtotal_linea:,.0f}"
+            f"${item.subtotal_linea:,.0f}",
         ])
-    
-    # Crear tabla
-    table = Table(data, colWidths=[0.5*inch, 3*inch, 0.8*inch, 1.2*inch, 1.2*inch])
+
+    table = Table(data, colWidths=[0.5 * inch, 3 * inch, 0.8 * inch, 1.2 * inch, 1.2 * inch])
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3d862e')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -2465,78 +2493,77 @@ def ventas_generar_pdf(request, id):
         ('FONTSIZE', (0, 0), (-1, 0), 12),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
         ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
     ]))
-    
+
     elements.append(table)
-    elements.append(Spacer(1, 0.3*inch))
-    
+    elements.append(Spacer(1, 0.3 * inch))
+
     # Totales
     totales_data = [
         ['Subtotal:', f"${venta.subtotal:,.0f}"],
         ['Descuento:', f"-${venta.descuento:,.0f}"],
         ['IVA (19%):', f"${venta.iva:,.0f}"],
-        ['<b>TOTAL:</b>', f"<b>${venta.valor_total:,.0f}</b>"]
+        ['<b>TOTAL:</b>', f"<b>${venta.valor_total:,.0f}</b>"],
     ]
-    
+
     if venta.abono > 0:
         totales_data.append(['Abono:', f"${venta.abono:,.0f}"])
         totales_data.append(['<b>Saldo Pendiente:</b>', f"<b>${venta.saldo_pendiente:,.0f}</b>"])
-    
-    totales_table = Table(totales_data, colWidths=[3*inch, 2*inch])
+
+    totales_table = Table(totales_data, colWidths=[3 * inch, 2 * inch])
     totales_table.setStyle(TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
         ('FONTSIZE', (0, -1), (-1, -1), 14),
         ('LINEABOVE', (0, -2), (-1, -2), 2, colors.black),
     ]))
-    
+
     elements.append(totales_table)
-    elements.append(Spacer(1, 0.5*inch))
-    
+    elements.append(Spacer(1, 0.5 * inch))
+
     # Información adicional
     elements.append(Paragraph(f"<b>Método de Pago:</b> {venta.get_metodo_pago_display()}", styles['Normal']))
     elements.append(Paragraph(f"<b>Estado:</b> {venta.get_estado_pago_display()}", styles['Normal']))
-    
+
     if venta.observaciones:
-        elements.append(Spacer(1, 0.2*inch))
+        elements.append(Spacer(1, 0.2 * inch))
         elements.append(Paragraph(f"<b>Observaciones:</b> {venta.observaciones}", styles['Normal']))
-    
-    elements.append(Spacer(1, 0.5*inch))
+
+    elements.append(Spacer(1, 0.5 * inch))
     elements.append(Paragraph("Gracias por su compra", styles['Normal']))
-    
+
     # Construir PDF
     doc.build(elements)
-    
-    # Obtener el valor del buffer y escribirlo en la respuesta
+
     pdf = buffer.getvalue()
     buffer.close()
     response.write(pdf)
-    
+
     return response
+
 @admin_required
 @transaction.atomic
 def ventas_eliminar(request, id):
     """
-    Elimina una venta y devuelve el stock al inventario
-    Solo disponible para administradores
+    Elimina una venta y devuelve el stock al inventario.
+    Solo disponible para administradores.
     """
     venta = get_object_or_404(Venta, pk=id)
-    
+
     try:
         # Obtener todos los productos de la venta
         productos_venta = Venta_has_producto.objects.filter(venta_idfactura=venta)
-        
+
         # Revertir el stock de cada producto
         for item in productos_venta:
             producto = item.producto_idproducto
             cantidad = item.cantidad
-            
-            # Devolver el stock
+
             stock_anterior = producto.stock_actual
             producto.stock_actual += cantidad
             producto.save()
-            
+
             # Registrar movimiento de reversión
             Movimiento_inventario.objects.create(
                 tipo_movimiento='ajuste',
@@ -2550,23 +2577,20 @@ def ventas_eliminar(request, id):
                 observaciones=f'Reversión por eliminación de venta {venta.numero_factura}',
                 imagen_comprobante='',
                 usuarios_id_usuario=request.user,
-                producto_idproducto=producto
+                producto_idproducto=producto,
             )
-        
-        # Guardar información antes de eliminar
+
         numero_factura = venta.numero_factura
-        
-        # Eliminar la venta (esto eliminará también los detalles por CASCADE)
         venta.delete()
-        
+
         messages.success(
-            request, 
+            request,
             f'Venta {numero_factura} eliminada exitosamente. El stock ha sido devuelto al inventario.'
         )
-        
+
     except Exception as e:
         messages.error(request, f'Error al eliminar la venta: {str(e)}')
-    
+
     return redirect('ventas_listar')
 
 # ===== VISTAS DE MENSAJERÍA (SOLO ADMIN) =====
@@ -2734,43 +2758,52 @@ def envios_crear(request):
     """
     Crear nuevo envío
     """
-    # Obtener venta_id si viene por parámetro GET
     venta_id = request.GET.get('venta_id', None)
-    
+
     if request.method == 'POST':
         form = EnvioForm(request.POST)
         if form.is_valid():
             envio = form.save(commit=False)
             envio.usuarios_id_usuario = request.user
             envio.save()
-            messages.success(request, f'Envío registrado exitosamente para la venta {envio.venta_idfactura.numero_factura}')
+            messages.success(
+                request,
+                f'Envío registrado exitosamente para la venta {envio.venta_idfactura.numero_factura}'
+            )
             return redirect('envios_detalle', id=envio.id)
     else:
-        # Si viene venta_id, preseleccionar esa venta en el formulario
         if venta_id:
             try:
                 venta = Venta.objects.get(id=venta_id)
+
                 # Verificar que no tenga envío ya asociado
                 if Envio.objects.filter(venta_idfactura=venta).exists():
-                    messages.warning(request, f'La venta {venta.numero_factura} ya tiene un envío asociado.')
+                    messages.warning(
+                        request,
+                        f'La venta {venta.numero_factura} ya tiene un envío asociado.'
+                    )
                     return redirect('ventas_listar')
-                
-                form = EnvioForm(initial={'venta_idfactura': venta})
+
+                # Inicializar venta y dirección con los datos de la venta/cliente
+                initial_data = {
+                    'venta_idfactura': venta,
+                    'direccion_envio': venta.direccion_cliente or '',
+                }
+                form = EnvioForm(initial=initial_data)
             except Venta.DoesNotExist:
                 messages.error(request, 'Venta no encontrada')
                 form = EnvioForm()
         else:
             form = EnvioForm()
-    
+
     context = {
         'form': form,
         'titulo': 'Registrar Nuevo Envío',
         'usuario': request.user,
-        'es_admin': request.user.tipo_usu == 'administrador'
+        'es_admin': request.user.tipo_usu == 'administrador',
     }
-    
-    return render(request, 'envios/crear.html', context)
 
+    return render(request, 'envios/crear.html', context)
 
 @login_required(login_url='login')
 def envios_editar(request, id):
@@ -2781,34 +2814,37 @@ def envios_editar(request, id):
     """
     envio = get_object_or_404(Envio, pk=id)
     es_admin = request.user.tipo_usu == 'administrador'
-    
+
     if request.method == 'POST':
-        # Usar formulario según el rol
         if es_admin:
             form = EnvioForm(request.POST, instance=envio)
         else:
             form = EnvioEditarOperarioForm(request.POST, instance=envio)
-        
+
         if form.is_valid():
             form.save()
             messages.success(request, 'Envío actualizado exitosamente')
             return redirect('envios_detalle', id=envio.id)
     else:
-        # Cargar formulario según el rol CON DATOS EXISTENTES
         if es_admin:
-            form = EnvioForm(instance=envio)  # Formulario completo con todos los datos
+            # Inicializar dirección con la de la venta si el envío aún no tiene o quieres refrescarla
+            initial_data = {}
+            if not envio.direccion_envio and envio.venta_idfactura and envio.venta_idfactura.direccion_cliente:
+                initial_data['direccion_envio'] = envio.venta_idfactura.direccion_cliente
+
+            form = EnvioForm(instance=envio, initial=initial_data)
         else:
-            form = EnvioEditarOperarioForm(instance=envio)  # Formulario limitado
-    
+            form = EnvioEditarOperarioForm(instance=envio)
+
     context = {
         'form': form,
         'titulo': 'Editar Envío',
         'envio': envio,
         'usuario': request.user,
         'es_admin': es_admin,
-        'solo_estado': not es_admin  # Variable para el template
+        'solo_estado': not es_admin,
     }
-    
+
     return render(request, 'envios/editar.html', context)
 
 @admin_required

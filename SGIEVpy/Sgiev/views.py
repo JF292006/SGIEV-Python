@@ -367,7 +367,7 @@ from django.views.decorators.cache import never_cache
 # from .models import Producto, Compra_proveedor, Movimiento_inventario (Asegúrate de tener tus modelos importados)
 
 
-@never_cache
+@login_required
 def list_producto(request):
     
     productos_agrupados = Producto.objects.filter(activo=1).values(
@@ -382,36 +382,38 @@ def list_producto(request):
     productos_final = []
     for producto_agrupado in productos_agrupados:
         
-        
         lote_representativo = Producto.objects.filter(
             nombre_producto=producto_agrupado['nombre_producto'],
             descripcion_producto=producto_agrupado['descripcion_producto'],
             activo=1
-        ).values('id').first() 
+        ).values('id').first()
         
         if lote_representativo:
             producto_agrupado['lote_id_representativo'] = lote_representativo['id']
             productos_final.append(producto_agrupado)
 
-   
-    producto_lotes_original = Producto.objects.select_related('categoria_idcategoria', 'proveedor_idproveedor').all()
+    
+    producto_lotes_original = Producto.objects.select_related(
+        'categoria_idcategoria', 
+        'proveedor_idproveedor'
+    ).all()
     
     lotes_disponibles = []
     for p in producto_lotes_original:
         nombre = p.nombre_producto.strip()
         descripcion = p.descripcion_producto.strip()
-        nombre_completo = f"{nombre} {descripcion}" 
+        nombre_completo = f"{nombre} {descripcion}"
         
         lotes_disponibles.append({
-            'id': p.id, 
-            'nombre_producto_completo': nombre_completo, 
-            'codigo_barras': p.codigo_barras, 
-            'stock_actual': p.stock_actual, 
+            'id': p.id,
+            'nombre_producto_completo': nombre_completo,
+            'codigo_barras': p.codigo_barras,
+            'stock_actual': p.stock_actual,
             'fecha_vencimiento': p.fecha_vencimiento.strftime('%Y-%m-%d') if p.fecha_vencimiento else 'N/A'
         })
 
     lotes_json_string = json.dumps(lotes_disponibles)
-    lotes_json_safe = mark_safe(lotes_json_string) 
+    lotes_json_safe = mark_safe(lotes_json_string)
     
     
     historial_compras = Compra_proveedor.objects.all().order_by('-fecha_compra')[:10]
@@ -419,12 +421,19 @@ def list_producto(request):
         tipo_movimiento__in=['ajuste', 'venta']
     ).order_by('-fecha_movimiento')[:15]
 
+
+    usuario = request.user
+    es_admin = request.user.tipo_usu == 'administrador'
+
     data = {
-        
-        'producto': productos_final, 
+        'producto': productos_final,
         'lotes_json': lotes_json_safe,
         'historial_compras': historial_compras,
-        'historial_salidas': historial_salidas, 
+        'historial_salidas': historial_salidas,
+
+
+        'usuario': usuario,
+        'es_admin': es_admin,
     }
     
     return render(request, 'producto/index.html', data)
@@ -445,23 +454,26 @@ def detalle_producto_modal(request, producto_id):
  
     return render(request, 'producto/detalle_producto_modal_content.html', context)
 
+@login_required
 def registro_producto(request):
+
+    usuario = request.user                               
+    es_admin = request.user.tipo_usu == 'administrador'  
+
     if request.method == "POST":
         
-       
         nombre = request.POST.get('nombre_producto')
         descripcion = request.POST.get('descripcion_producto')
         
         registro_sanitario_valor = request.POST.get('registrosanitario', '').strip()
         if not registro_sanitario_valor:
             registro_sanitario_valor = 'SIN_REGISTRO'
-        
+
         categoria_id = request.POST.get('categoria_idcategoria')
         proveedor_id = request.POST.get('proveedor_idproveedor')
-        activo = 1 
+        activo = 1
         
-        
-       
+        # Valores por defecto para producto catálogo
         codigo = "SIN_LOTE_CATALOGO"
         precio_compra = Decimal('0.00')
         precio_venta = Decimal('0.00')
@@ -469,15 +481,13 @@ def registro_producto(request):
         stock_actual = 0
         stock_min = 0
         stock_max = 0
-        fecha_ven = date(2099, 12, 31) 
+        fecha_ven = date(2099, 12, 31)
         fecha_cre = timezone.now()
 
-        
         try:
             categoria = get_object_or_404(Categoria, id=categoria_id)
             proveedor = get_object_or_404(Proveedor, id=proveedor_id)
-            
-            
+
             producto = Producto(
                 nombre_producto = nombre,
                 descripcion_producto = descripcion,
@@ -488,10 +498,10 @@ def registro_producto(request):
                 stock_actual = stock_actual,
                 stock_minimo = stock_min,
                 stock_maximo = stock_max,
-                fecha_vencimiento = fecha_ven, 
+                fecha_vencimiento = fecha_ven,
                 fecha_creacion = fecha_cre,
                 activo = activo,
-                registrosanitario = registro_sanitario_valor, 
+                registrosanitario = registro_sanitario_valor,
                 categoria_idcategoria = categoria,
                 proveedor_idproveedor = proveedor,
             )
@@ -501,32 +511,38 @@ def registro_producto(request):
             return redirect('list_producto')
 
         except IntegrityError:
-           
             messages.error(request, f"Error: Ya existe un producto de catálogo con el nombre '{nombre}' y la misma descripción.")
             
-           
             categorias = Categoria.objects.filter(activo=1)
             proveedores = Proveedor.objects.filter(activo=1)
-            
-        
+
             data = {
-                'categorias': categorias, 
+                'categorias': categorias,
                 'proveedores': proveedores,
-                'form_data': request.POST 
+                'form_data': request.POST,
+                'usuario': usuario,   # <-- añadido
+                'es_admin': es_admin  # <-- añadido
             }
             return render(request, 'producto/nuevoprod.html', data)
-            
+
         except Exception as e:
-             messages.error(request, f"Ocurrió un error inesperado al registrar el producto: {e}")
-             return redirect('list_producto')
+            messages.error(request, f"Ocurrió un error inesperado al registrar el producto: {e}")
+            return redirect('list_producto')
 
-
-    
-  
+    # GET: renderizar formulario vacío
     categorias = Categoria.objects.filter(activo=1)
     proveedores = Proveedor.objects.filter(activo=1)
-    data = {'categorias': categorias, 'proveedores': proveedores}
+
+    data = {
+        'categorias': categorias,
+        'proveedores': proveedores,
+        'usuario': usuario,   
+        'es_admin': es_admin  
+    }
+
     return render(request, 'producto/nuevoprod.html', data)
+
+
 
 
 

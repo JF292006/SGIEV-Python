@@ -546,16 +546,24 @@ def registro_producto(request):
 
 
 
+@login_required
 def pre_editar_producto(request, id):
     
     producto = get_object_or_404(Producto, id=id)
     categorias = Categoria.objects.filter(activo=1)
     proveedores = Proveedor.objects.filter(activo=1)
+
+    usuario = request.user                               
+    es_admin = request.user.tipo_usu == 'administrador'  
+
     data = {
         'producto': producto,
         'categorias': categorias,
-        'proveedores': proveedores
+        'proveedores': proveedores,
+        'usuario': usuario,     
+        'es_admin': es_admin   
     }
+
     return render(request, 'producto/editarprod.html', data)
 
 

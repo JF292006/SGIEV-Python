@@ -164,7 +164,7 @@
         <div id="content" class="p-4">
             <div class="card-compra">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h3 class="text-success mb-0">Nueva Compra a **{{ proveedor.nombre_proveedor }}**</h3>
+                    <h3 class="text-success mb-0">Nueva Compra a {{ proveedor.nombre_proveedor }}</h3>
                     <small class="text-muted">Proveedor ID: {{ proveedor.pk }}</small>
                 </div>
                 
@@ -212,7 +212,7 @@
                         </div>
                         <div class="form-group col-md-3">
                              <label>Fecha vencimiento</label>
-                            <input type="date" class="form-control" name="fecha_vencimiento">
+                            <input type="date" id="fecha_vencimiento" class="form-control" name="fecha_vencimiento">
                         </div>
                         
                     </div>
@@ -390,8 +390,7 @@
         const nuevo = document.getElementById("producto_nuevo_box");
         const existente = document.getElementById("producto_existente_box");
         
-        // 🟢 CAMBIO 2: Remover 'id_precio_venta' de esta lista.
-        // Ahora es un campo global que tiene 'required' en el HTML.
+        
         const camposSoloNuevo = [
             document.getElementById("id_nombre_producto"),
             document.getElementById("id_categoria"),
@@ -404,7 +403,7 @@
                  nuevo.style.display = "block";
                  existente.style.display = "none";
                  
-                 // Hacemos obligatorios SÓLO los campos del Producto Nuevo Maestro
+           
                  camposSoloNuevo.forEach(field => field.setAttribute('required', 'required'));
                  if (campoProductoExistente) {
                      campoProductoExistente.removeAttribute('required');
@@ -414,7 +413,7 @@
                  nuevo.style.display = "none";
                  existente.style.display = "block";
                  
-                 // Removemos el 'required' de los campos del Producto Nuevo Maestro
+           
                  camposSoloNuevo.forEach(field => field.removeAttribute('required'));
                  if (campoProductoExistente) {
                      campoProductoExistente.setAttribute('required', 'required');
@@ -426,6 +425,32 @@
 
         tipo.addEventListener("change", toggleBoxes);
     });
+</script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var inputFechaVencimiento = document.getElementById('fecha_vencimiento');
+        
+        if (inputFechaVencimiento) {
+            
+            var fechaMinima = new Date();
+     
+            fechaMinima.setFullYear(fechaMinima.getFullYear() + 1);
+
+            var year = fechaMinima.getFullYear();
+            var month = ('0' + (fechaMinima.getMonth() + 1)).slice(-2); 
+            var day = ('0' + fechaMinima.getDate()).slice(-2);
+            
+            var fechaFormateada = year + '-' + month + '-' + day;
+            
+   
+            inputFechaVencimiento.min = fechaFormateada;
+        }
+    });
+
+    function toggleSidebar() {
+        document.getElementById('sidebar-container').classList.toggle('active');
+    }
 </script>
 </body>
 </html>

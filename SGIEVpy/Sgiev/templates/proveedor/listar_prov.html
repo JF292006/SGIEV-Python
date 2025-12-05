@@ -31,7 +31,7 @@
 </div>
     </div>
 
-    <!-- Selector rápido para compras -->
+    
     <div class="row mb-3">
         <div class="col-md-6">
             <div class="input-group">
@@ -50,12 +50,14 @@
                 </div>
             </div>
         </div>
+</div>
     </div>
 
     <script>
       (function(){
         const sel = document.getElementById('prov_seleccion');
         const btn = document.getElementById('btn_compra');
+        const PRODUCT_URL_TEMPLATE = "{% url 'productos_por_proveedor' 0 %}";
 
         sel.addEventListener('change', function(){
           btn.disabled = !this.value;
@@ -68,7 +70,10 @@
           const target = tmpl.replace('/0/', '/' + id + '/');
           window.location.href = target;
         });
+
+        
       })();
+
     </script>
 
     <!-- Tabla de proveedores -->
@@ -147,3 +152,51 @@
 
 </div>
 {% endblock %}
+<script>
+    $(document).ready(function() {
+    const $proveedorSelect = $('#prov_seleccion');
+    const $productoSelect = $('#producto_compra');
+    const productUrlTemplate = "{% url 'productos_por_proveedor' 0 %}";
+    
+    $proveedorSelect.on('change', function() {
+        const proveedorId = $(this).val();
+        
+        $productoSelect.empty().append('<option value="">Cargando productos...</option>').prop('disabled', true);
+
+        if (proveedorId) {
+
+            const url = productUrlTemplate.replace('0', proveedorId); 
+
+            $.ajax({
+                url: url,
+                type: 'GET',
+                dataType: 'json',
+                success: function(data) {
+                    $productoSelect.empty();
+                    
+                    if (data.productos && data.productos.length > 0) {
+                        $productoSelect.append('<option value="">Selecciona un producto...</option>');
+                     
+                        $.each(data.productos, function(index, producto) {
+                            $productoSelect.append(
+                                `<option value="${producto.id}">${producto.nombre_producto}</option>`
+                            );
+                        });
+                        $productoSelect.prop('disabled', false); 
+                    } else {
+                        $productoSelect.append('<option value="">No hay productos registrados para este proveedor</option>');
+                    }
+                },
+                error: function() {
+                    $productoSelect.empty().append('<option value="">Error al cargar productos</option>');
+                }
+            });
+        } else {
+           
+            $productoSelect.empty().append('<option value="">Selecciona un proveedor primero...</option>').prop('disabled', true);
+        }
+    });
+
+    
+});
+</script>

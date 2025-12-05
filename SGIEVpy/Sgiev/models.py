@@ -79,16 +79,7 @@ class Producto(models.Model):
     categoria_idcategoria = models.ForeignKey(Categoria, on_delete=models.CASCADE)
     proveedor_idproveedor = models.ForeignKey(Proveedor, on_delete=models.CASCADE)
     activo = models.SmallIntegerField()
-    class Meta:
-        
-        constraints = [
-            models.UniqueConstraint(
-                fields=['nombre_producto', 'descripcion_producto'], 
-                condition=models.Q(codigo_barras='SIN_LOTE_CATALOGO'), 
-                name='unique_maestro_producto'
-            )
-        ]
-        
+    class Meta:     
         verbose_name = "Producto"
         verbose_name_plural = "Productos"
 

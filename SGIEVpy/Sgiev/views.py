@@ -349,22 +349,6 @@ def eliminar_categoria(request, id):
     return redirect('list_categoria')
 
 #PRODUCTOS
-# views.py
-import json
-from django.utils.safestring import mark_safe
-# IMPORTA ESTO:
-from django.db.models import Sum 
-from django.views.decorators.cache import never_cache
-# from .models import Producto, Compra_proveedor, Movimiento_inventario (Asegúrate de tener tus modelos importados)
-
-
-# views.py
-import json
-from django.utils.safestring import mark_safe
-# IMPORTA ESTO:
-from django.db.models import Sum 
-from django.views.decorators.cache import never_cache
-# from .models import Producto, Compra_proveedor, Movimiento_inventario (Asegúrate de tener tus modelos importados)
 
 
 @login_required
@@ -456,25 +440,35 @@ def detalle_producto_modal(request, producto_id):
 
 @login_required
 def registro_producto(request):
+    usuario = request.user  
+    es_admin = request.user.tipo_usu == 'administrador' 
+   
+    def render_form_with_data(request, form_data=None):
+        categorias = Categoria.objects.filter(activo=1)
+        proveedores = Proveedor.objects.filter(activo=1)
 
-    usuario = request.user                               
-    es_admin = request.user.tipo_usu == 'administrador'  
+        data = {
+            'categorias': categorias,
+            'proveedores': proveedores,
+            'form_data': form_data or {},
+            'usuario': usuario, 
+            'es_admin': es_admin 
+        }
+        return render(request, 'producto/nuevoprod.html', data)
 
     if request.method == "POST":
-        
-        nombre = request.POST.get('nombre_producto')
-        descripcion = request.POST.get('descripcion_producto')
+    
+        nombre = request.POST.get('nombre_producto', '').strip()
+        descripcion = request.POST.get('descripcion_producto', '').strip()
+        categoria_id = request.POST.get('categoria_idcategoria')
+        proveedor_id = request.POST.get('proveedor_idproveedor')
         
         registro_sanitario_valor = request.POST.get('registrosanitario', '').strip()
         if not registro_sanitario_valor:
             registro_sanitario_valor = 'SIN_REGISTRO'
 
-        categoria_id = request.POST.get('categoria_idcategoria')
-        proveedor_id = request.POST.get('proveedor_idproveedor')
-        activo = 1
-        
-        # Valores por defecto para producto catálogo
         codigo = "SIN_LOTE_CATALOGO"
+        activo = 1
         precio_compra = Decimal('0.00')
         precio_venta = Decimal('0.00')
         margen = Decimal('0.00')
@@ -483,6 +477,15 @@ def registro_producto(request):
         stock_max = 0
         fecha_ven = date(2099, 12, 31)
         fecha_cre = timezone.now()
+        existe_catalogo = Producto.objects.filter(
+            nombre_producto=nombre,
+            descripcion_producto=descripcion,
+            codigo_barras=codigo
+        ).exists()
+        
+        if existe_catalogo:
+            messages.error(request, f"Error de Unicidad: Ya existe un producto de catálogo con el nombre '{nombre}' y la misma descripción. (Código: {codigo})")
+            return render_form_with_data(request, request.POST)
 
         try:
             categoria = get_object_or_404(Categoria, id=categoria_id)
@@ -510,37 +513,11 @@ def registro_producto(request):
             messages.success(request, f"Producto de catálogo '{nombre}' registrado exitosamente.")
             return redirect('list_producto')
 
-        except IntegrityError:
-            messages.error(request, f"Error: Ya existe un producto de catálogo con el nombre '{nombre}' y la misma descripción.")
-            
-            categorias = Categoria.objects.filter(activo=1)
-            proveedores = Proveedor.objects.filter(activo=1)
-
-            data = {
-                'categorias': categorias,
-                'proveedores': proveedores,
-                'form_data': request.POST,
-                'usuario': usuario,   # <-- añadido
-                'es_admin': es_admin  # <-- añadido
-            }
-            return render(request, 'producto/nuevoprod.html', data)
-
         except Exception as e:
             messages.error(request, f"Ocurrió un error inesperado al registrar el producto: {e}")
-            return redirect('list_producto')
+            return render_form_with_data(request, request.POST)
 
-    # GET: renderizar formulario vacío
-    categorias = Categoria.objects.filter(activo=1)
-    proveedores = Proveedor.objects.filter(activo=1)
-
-    data = {
-        'categorias': categorias,
-        'proveedores': proveedores,
-        'usuario': usuario,   
-        'es_admin': es_admin  
-    }
-
-    return render(request, 'producto/nuevoprod.html', data)
+    return render_form_with_data(request)
 
 
 
@@ -572,17 +549,35 @@ def editar_producto(request, id):
     if request.method == "POST":
         producto = get_object_or_404(Producto, id=id)
 
-        producto.nombre_producto = request.POST.get('nombre_producto')
-        producto.descripcion_producto = request.POST.get('descripcion_producto')
-        producto.codigo_barras = request.POST.get('codigo_barras')
+        nombre = request.POST.get('nombre_producto')
+        descripcion = request.POST.get('descripcion_producto')
+        codigo = request.POST.get('codigo_barras') 
+        if codigo == "SIN_LOTE_CATALOGO":
+
+            existe_duplicado = Producto.objects.filter(
+                nombre_producto=nombre,
+                descripcion_producto=descripcion,
+                codigo_barras="SIN_LOTE_CATALOGO"
+            ).exclude(id=producto.id).exists()
+            
+            if existe_duplicado:
+                messages.error(
+                    request, 
+                    f"Error de Unicidad: Ya existe otro producto de catálogo maestro con el nombre '{nombre}' y la misma descripción. No se guardaron los cambios."
+                )
+                return redirect('pre_editar_producto', id=id)
+        
+        producto.nombre_producto = nombre
+        producto.descripcion_producto = descripcion
+        producto.codigo_barras = codigo
         producto.registrosanitario = request.POST.get('registrosanitario')
 
-        
-        from decimal import Decimal, InvalidOperation
         try:
             producto.precio_compra = Decimal(request.POST.get('precio_compra') or '0')
         except InvalidOperation:
             producto.precio_compra = Decimal('0.00')
+
+        
         try:
             producto.precio_venta = Decimal(request.POST.get('precio_venta') or '0')
         except InvalidOperation:
@@ -607,7 +602,7 @@ def editar_producto(request, id):
 
         producto.fecha_vencimiento = request.POST.get('fecha_vencimiento')
 
-        
+
         categoria_id = request.POST.get('categoria_idcategoria')
         proveedor_id = request.POST.get('proveedor_idproveedor')
         producto.categoria_idcategoria = get_object_or_404(Categoria, id=categoria_id)
@@ -616,6 +611,7 @@ def editar_producto(request, id):
         producto.activo = request.POST.get('activo') or producto.activo
 
         producto.save()
+        messages.success(request, f"El producto '{nombre}' ha sido actualizado exitosamente.")
 
     return redirect('list_producto')
 
@@ -934,6 +930,15 @@ def detalle_producto_modal(request, producto_id):
 
 
 #VENTA DE PROVEEDOR
+def obtener_productos_por_proveedor(request, proveedor_id):
+    productos_filtrados = Producto.objects.filter(
+        proveedor_idproveedor__id=proveedor_id,
+        activo=1
+    ).values('id', 'nombre_producto') 
+    lista_productos = list(productos_filtrados)
+    
+    return JsonResponse({'productos': lista_productos})
+
 def _get_carrito(request, idproveedor):
     carrito_key = f'carrito_compra_{idproveedor}'
     return request.session.get(carrito_key, [])
@@ -959,10 +964,12 @@ def crear_compra_proveedor(request, idproveedor):
     proveedor = get_object_or_404(Proveedor, id=idproveedor)
     categorias = Categoria.objects.filter(activo=1)
     
-    
+    print(f"--- DEP-COMPRA: Proveedor ID={proveedor.id}, Nombre={proveedor.nombre_proveedor} ---")
+
     productos_maestros = Producto.objects.filter(
         activo=1, 
-        codigo_barras='SIN_LOTE_CATALOGO' 
+        codigo_barras='SIN_LOTE_CATALOGO', 
+        proveedor_idproveedor=proveedor
     ).order_by('nombre_producto')
 
     

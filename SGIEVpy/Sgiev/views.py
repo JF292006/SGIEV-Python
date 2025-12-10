@@ -2103,6 +2103,21 @@ def usuarios_detalle(request, id):
     
     return render(request, 'usuarios/detalle.html', context)
 
+@login_required
+def perfil_usuario(request):
+    usuario_detalle = request.user  # ← El usuario logeado
+
+    context = {
+        'usuario_detalle': usuario_detalle,
+        'usuario': request.user
+    }
+
+    return render(request, 'usuarios/detalle_usu.html', context)
+
+
+
+
+
 
 # ===== VISTAS DE VENTAS =====
 @login_required(login_url='login')

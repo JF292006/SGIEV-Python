@@ -61,6 +61,10 @@ urlpatterns = [
     path('usuarios/editar/<int:id>/', views.usuarios_editar, name='usuarios_editar'),
     path('usuarios/eliminar/<int:id>/', views.usuarios_eliminar, name='usuarios_eliminar'),
     path('usuarios/detalle/<int:id>/', views.usuarios_detalle, name='usuarios_detalle'),
+    path('usuarios/perfil/', views.perfil_usuario, name='perfil_usuario'),
+
+    
+    
     
     # CRUD Ventas
     path('ventas/', views.ventas_listar, name='ventas_listar'),

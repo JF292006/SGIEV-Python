@@ -1218,13 +1218,11 @@ def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
 
     tipo = request.POST.get("tipo_producto")
 
-  
     try:
         cantidad = int(request.POST.get("cantidad", "0"))
         precio_compra_unitario = Decimal(request.POST.get("valor_unitario") or "0") 
         lote_detalle = request.POST.get("lote") 
         fecha_vencimiento = request.POST.get("fecha_vencimiento") or None
-        
         
         descripcion_producto = request.POST.get('descripcion_producto', '').strip() 
         
@@ -1267,11 +1265,11 @@ def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
         producto_id_en_carrito = 0
         nombre_producto_en_carrito = nombre_producto
     
-   
+    
     elif tipo == "existente":
         producto_id_post = request.POST.get("producto_id")
         
-       
+        
         producto_existente_obj = get_object_or_404(Producto, id=producto_id_post) 
         
         
@@ -1292,7 +1290,7 @@ def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
         messages.error(request, "Tipo de producto no válido.")
         return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
 
- 
+    
     carrito_key = f'carrito_compra_{proveedor.id}'
     carrito = request.session.get(carrito_key, [])
     subtotal_linea = cantidad * precio_compra_unitario
@@ -1308,9 +1306,9 @@ def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
         'fecha_vencimiento': fecha_vencimiento,
         'lote': lote_detalle,
         'categoria_id': categoria_id_en_carrito if categoria_id_en_carrito else None,
+        'precio_venta_sugerido': float(precio_venta), 
         
         'datos_nuevo_maestro': {
-            'precio_venta': float(precio_venta), 
             'registro_sanitario': request.POST.get('registrosaniario', ''),
             'stock_minimo': int(request.POST.get('stock_minimo') or 1),
             'stock_maximo': int(request.POST.get('stock_maximo') or 1000),
@@ -1359,15 +1357,19 @@ def procesar_compra_final(request, proveedor):
         )
         
         for item in carrito:
-            producto = None
+            producto_maestro = None
+            
             precio_unitario = Decimal(str(item['precio']))
             cantidad = int(item['cantidad'])
             fecha_vencimiento_detalle = item['fecha_vencimiento']
             lote_detalle = item['lote']
             subtotal_linea = Decimal(str(item['subtotal']))
             stock_anterior = 0 
+
+            precio_venta_float_sugerido = item.get('precio_venta_sugerido')
+            precio_venta_sugerido = Decimal(str(precio_venta_float_sugerido)) if precio_venta_float_sugerido else Decimal('0.00')
+
             
-          
             if item['tipo'] == "nuevo":
                 
                 datos_maestro = item.get('datos_nuevo_maestro', {})
@@ -1380,9 +1382,8 @@ def procesar_compra_final(request, proveedor):
                 
                 
                 categoria_obj = get_object_or_404(Categoria, id=categoria_id_from_carrito)
-                
-                precio_venta_float = datos_maestro.get('precio_venta')
-                precio_venta = Decimal(str(precio_venta_float)) if precio_venta_float else Decimal('0.00')
+
+                precio_venta_maestro = precio_venta_sugerido 
 
                 descripcion_producto = datos_maestro.get('descripcion_producto', '')
                 registrosanitario = datos_maestro.get('registro_sanitario', '')
@@ -1390,12 +1391,12 @@ def procesar_compra_final(request, proveedor):
                 stock_maximo_val = datos_maestro.get('stock_maximo') or 999999 
 
                 margen_calculado = Decimal('0.00')
-                if precio_unitario > Decimal('0') and precio_venta > Decimal('0'):
-                    nuevo_margen_calc = ((precio_venta - precio_unitario) / precio_unitario) * Decimal('100.00')
+                if precio_unitario > Decimal('0') and precio_venta_maestro > Decimal('0'):
+                    nuevo_margen_calc = ((precio_venta_maestro - precio_unitario) / precio_unitario) * Decimal('100.00')
                     margen_calculado = nuevo_margen_calc.quantize(Decimal('0.01'))
                 
                 
-               
+                
                 try:
                     producto_maestro, creado_maestro = Producto.objects.get_or_create(
                         nombre_producto=item['nombre'],
@@ -1405,8 +1406,8 @@ def procesar_compra_final(request, proveedor):
                         defaults={
                             'registrosanitario': registrosanitario,
                             'precio_compra': precio_unitario,
-                            'precio_venta': precio_venta,
-                            'margen_ganancia': margen_calculado,
+                            'precio_venta': precio_venta_maestro, 
+                            'margen_ganancia': margen_calculado,  
                             'stock_actual': 0, 
                             'stock_minimo': stock_minimo_val,
                             'stock_maximo': stock_maximo_val,
@@ -1425,21 +1426,18 @@ def procesar_compra_final(request, proveedor):
                 
                 if not creado_maestro:
                     producto_maestro.precio_compra = precio_unitario
-                    producto_maestro.precio_venta = precio_venta
-                    producto_maestro.margen_ganancia = margen_calculado
+                    producto_maestro.precio_venta = precio_venta_maestro 
+                    producto_maestro.margen_ganancia = margen_calculado   
                     producto_maestro.save()
 
-
-                
-                
                 producto = Producto.objects.create(
                     nombre_producto=item['nombre'],
                     descripcion_producto=descripcion_producto, 
                     codigo_barras=lote_detalle, 
                     registrosanitario=registrosanitario, 
                     precio_compra=precio_unitario,
-                    precio_venta=precio_venta,
-                    margen_ganancia=margen_calculado,
+                    precio_venta=producto_maestro.precio_venta, 
+                    margen_ganancia=producto_maestro.margen_ganancia, 
                     stock_actual=0, 
                     stock_minimo=stock_minimo_val,
                     stock_maximo=stock_maximo_val,
@@ -1451,20 +1449,27 @@ def procesar_compra_final(request, proveedor):
                 stock_anterior = 0
             
             
-            else: 
+            else: # tipo == "existente"
                 
                 producto_id_from_carrito = item.get('producto_id')
                 producto_base = Producto.objects.get(id=producto_id_from_carrito)
+                producto_maestro = producto_base 
                 
                 fecha_vencimiento_final = fecha_vencimiento_detalle or producto_base.fecha_vencimiento or date(2099, 12, 31)
 
-                precio_venta_float_global = item.get('precio_venta') 
-                precio_venta_global = Decimal(str(precio_venta_float_global)) if precio_venta_float_global else producto_base.precio_venta
+      
+                precio_venta_maestro = precio_venta_sugerido 
 
-                margen_calculado_global = producto_base.margen_ganancia
-                if precio_unitario > Decimal('0') and precio_venta_global > Decimal('0'):
-                    nuevo_margen_calc = ((precio_venta_global - precio_unitario) / precio_unitario) * Decimal('100.00')
-                    margen_calculado_global = nuevo_margen_calc.quantize(Decimal('0.01'))
+                margen_calculado = Decimal('0.00')
+                if precio_unitario > Decimal('0') and precio_venta_maestro > Decimal('0'):
+                    nuevo_margen_calc = ((precio_venta_maestro - precio_unitario) / precio_unitario) * Decimal('100.00')
+                    margen_calculado = nuevo_margen_calc.quantize(Decimal('0.01'))
+                
+
+                producto_maestro.precio_compra = precio_unitario
+                producto_maestro.precio_venta = precio_venta_maestro 
+                producto_maestro.margen_ganancia = margen_calculado   
+                producto_maestro.save()
                 
                 try:
                     
@@ -1475,11 +1480,12 @@ def procesar_compra_final(request, proveedor):
                     )
                     stock_anterior = producto.stock_actual 
                     
-                    producto.precio_venta = precio_venta_global
-                    producto.margen_ganancia = margen_calculado_global
+                    producto.precio_venta = producto_maestro.precio_venta     
+                    producto.margen_ganancia = producto_maestro.margen_ganancia 
+         
                     
                 except Producto.DoesNotExist:
-                    
+           
                     producto = Producto.objects.create(
                         nombre_producto=producto_base.nombre_producto,
                         descripcion_producto=producto_base.descripcion_producto,
@@ -1488,8 +1494,8 @@ def procesar_compra_final(request, proveedor):
                         
                         codigo_barras=lote_detalle, 
                         fecha_vencimiento=fecha_vencimiento_final,
-                        precio_venta=precio_venta_global,
-                        margen_ganancia=margen_calculado_global, 
+                        precio_venta=producto_maestro.precio_venta,      
+                        margen_ganancia=producto_maestro.margen_ganancia, 
                         
                         stock_minimo=producto_base.stock_minimo, 
                         stock_maximo=producto_base.stock_maximo,
@@ -1523,11 +1529,6 @@ def procesar_compra_final(request, proveedor):
                 
                 producto.stock_actual += cantidad
                 producto.precio_compra = precio_unitario
-                
-                if producto.precio_venta > Decimal('0') and producto.precio_compra > Decimal('0'):
-                    nuevo_margen = ((producto.precio_venta - producto.precio_compra) / producto.precio_compra) * Decimal('100.00')
-                    producto.margen_ganancia = nuevo_margen.quantize(Decimal('0.01'))
-                    
                 
                 producto.save() 
                 
@@ -1639,9 +1640,7 @@ def crear_compra_proveedor(request, idproveedor):
 
 @login_required
 def compra_quitar_producto(request, idproveedor, temp_id):
-    """
-    Quita un producto del carrito de compra usando su ID temporal.
-    """
+    
     proveedor = get_object_or_404(Proveedor, id=idproveedor)
     carrito_key = f'carrito_compra_{proveedor.id}'
     carrito = request.session.get(carrito_key, [])

@@ -1862,6 +1862,127 @@ def eliminar_proveedor(request, id):
     proveedor.delete()
     return redirect('listar_proveedores')
 
+@login_required(login_url='login')
+def proveedores_generar_pdf(request):
+    """
+    Genera un PDF con el listado completo de proveedores.
+    """
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    from django.http import HttpResponse
+    from io import BytesIO
+    from datetime import datetime
+
+    # Obtener proveedores
+    proveedores = Proveedor.objects.all().order_by('nombre_proveedor')
+
+    # Preparar respuesta
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="Listado_Proveedores.pdf"'
+
+    # Crear PDF
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    elements = []
+
+    # Estilos
+    styles = getSampleStyleSheet()
+    styleN = styles["Normal"]
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#3d862e'),
+        alignment=TA_CENTER
+    )
+
+    # TÍTULO
+    elements.append(Paragraph("ROMAR NATURAL", title_style))
+
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # SUBTÍTULO
+    elements.append(Paragraph("<b>LISTADO DE PROVEEDORES</b>", styles['Heading2']))
+
+    # FECHA DE GENERACIÓN
+    fecha = datetime.now().strftime('%d/%m/%Y %H:%M')
+    elements.append(Paragraph(f"Generado el: {fecha}", styles['Normal']))
+
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # TABLA DE PROVEEDORES
+    data = [
+        [
+            'ID',
+            'Nombre',
+            'Correo',
+            'Teléfono',
+            'Dirección',
+            'NIT',
+            'Contacto',
+            'Tel.Contacto',
+            'Activo'
+        ]
+    ]
+
+    for idx, p in enumerate(proveedores, 1):
+        data.append([
+            str(idx),
+            p.nombre_proveedor[:25],
+            p.correo_proveedor[:25],
+            p.telefono,
+            p.direccion[:25],
+            p.nit,
+            p.contacto_nombre if p.contacto_nombre else "",
+            p.contacto_telefono if p.contacto_telefono else "",
+            "Sí" if p.activo == 1 else "No",
+        ])
+
+    # Definir columnas
+    # Calcular ancho disponible (página - márgenes por defecto)
+    page_width, page_height = letter
+    left_margin = doc.leftMargin
+    right_margin = doc.rightMargin
+    disponible = page_width - left_margin - right_margin
+
+    # Pesos proporcionales (no son anchos, son "relaciones")
+    pesos = [0.5, 1.5, 1.5, 1, 1.7, 1, 1.4, 1.1, 0.7]
+
+    total_pesos = sum(pesos)
+
+    # Convertir pesos → anchos reales en pulgadas
+    col_widths = [(p / total_pesos) * disponible for p in pesos]
+
+    table = Table(data, colWidths=col_widths)
+
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3d862e')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+    ]))
+
+    elements.append(table)
+
+    # Construir PDF
+    doc.build(elements)
+    pdf = buffer.getvalue()
+    buffer.close()
+    response.write(pdf)
+
+    return response
+
+
 
 #LOGIN - AUTENTICACIÓN 
 

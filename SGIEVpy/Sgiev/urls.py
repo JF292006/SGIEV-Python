@@ -42,10 +42,10 @@ urlpatterns = [
     path('compra/<int:idproveedor>/limpiar/', views.compra_limpiar_carrito, name='compra_limpiar_carrito'),
     path('compra/detalle/<int:compra_id>/', views.detalle_compra_proveedor, name='detalle_compra_proveedor'),
     path('productos/por_proveedor/<int:proveedor_id>/', views.obtener_productos_por_proveedor, name='productos_por_proveedor'),
+    path('proveedores/pdf/', views.proveedores_generar_pdf, name='proveedores_pdf'),
 
 
-    # Index / Landing Page
-    path('', views.index, name='index'),
+    
     
     # Autenticación
     path('login/', views.login_view, name='login'),

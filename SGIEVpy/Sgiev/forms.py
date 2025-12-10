@@ -3,7 +3,11 @@ from django.contrib.auth.hashers import make_password, check_password
 from .models import Usuarios, Venta, Producto, Venta_has_producto, Envio, Mensajeria, Proveedor
 from decimal import Decimal
 from django.db.models import Sum
-
+from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
+from datetime import date
+from dateutil.relativedelta import relativedelta
+import re
 #------------envios
 class EnvioEditarOperarioForm(forms.ModelForm):
     """
@@ -239,52 +243,61 @@ from .models import Venta, Producto, Usuarios
 
 
 class EditarEstadoVentaForm(forms.ModelForm):
-    """
-    Formulario para que admin edite el estado de pago
-    y la información básica del cliente.
-    """
+    nuevo_abono = forms.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        required=False,
+        initial=0,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'placeholder': '0.00',
+            'step': '0.01',
+            'min': '0'
+        }),
+        label='Nuevo Abono',
+        help_text='Ingrese el valor adicional a abonar'
+    )
+    
     class Meta:
         model = Venta
         fields = [
-            'estado_pago',
             'nombre_cliente',
             'correo_cliente',
             'telefono_cliente',
             'direccion_cliente',
+            'observaciones'
         ]
-
         widgets = {
-            'estado_pago': forms.Select(attrs={
-                'class': 'form-control',
-                'required': 'required'
-            }),
-            'nombre_cliente': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Nombre del cliente',
-                'required': 'required',
-            }),
-            'correo_cliente': forms.EmailInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'correo@cliente.com',
-                'required': 'required',
-            }),
-            'telefono_cliente': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Teléfono del cliente',
-            }),
-            'direccion_cliente': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Dirección del cliente',
-            }),
+            'nombre_cliente': forms.TextInput(attrs={'class': 'form-control'}),
+            'correo_cliente': forms.EmailInput(attrs={'class': 'form-control'}),
+            'telefono_cliente': forms.TextInput(attrs={'class': 'form-control'}),
+            'direccion_cliente': forms.TextInput(attrs={'class': 'form-control'}),
+            'observaciones': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
-
-        labels = {
-            'estado_pago': 'Estado de Pago',
-            'nombre_cliente': 'Nombre del Cliente',
-            'correo_cliente': 'Correo del Cliente',
-            'telefono_cliente': 'Teléfono del Cliente',
-            'direccion_cliente': 'Dirección del Cliente',
-        }
+    
+    def __init__(self, *args, **kwargs):
+        self.venta = kwargs.pop('venta', None)
+        super().__init__(*args, **kwargs)
+        
+        # Si la venta ya está pagada, deshabilitar el campo de abono
+        if self.venta and self.venta.estado_pago == 'pagado':
+            self.fields['nuevo_abono'].disabled = True
+            self.fields['nuevo_abono'].help_text = 'La venta ya está completamente pagada'
+    
+    def clean_nuevo_abono(self):
+        nuevo_abono = self.cleaned_data.get('nuevo_abono') or Decimal('0')
+        
+        if nuevo_abono < 0:
+            raise ValidationError('El abono no puede ser negativo')
+        
+        if self.venta and nuevo_abono > 0:
+            # Validar que no exceda el saldo pendiente
+            if nuevo_abono > self.venta.saldo_pendiente:
+                raise ValidationError(
+                    f'El abono no puede ser mayor al saldo pendiente (${self.venta.saldo_pendiente:,.0f})'
+                )
+        
+        return nuevo_abono
 
 
 class VentaForm(forms.ModelForm):
@@ -529,148 +542,230 @@ class LoginForm(forms.Form):
         
         return cleaned_data
 
-
 class UsuarioForm(forms.ModelForm):
-    """
-    Formulario para crear y editar usuarios
-    """
-    # Campo de contraseña personalizado
+    # Validador para teléfono (solo 10 dígitos)
+    telefono_validator = RegexValidator(
+        regex=r'^\d{10}$',
+        message='El teléfono debe tener exactamente 10 dígitos'
+    )
+    
+    # Validador para número de identificación (máximo 11 dígitos)
+    identificacion_validator = RegexValidator(
+        regex=r'^\d{1,11}$',
+        message='El número de identificación debe tener máximo 11 dígitos'
+    )
+    
+    num_identificacion = forms.CharField(
+        max_length=11,
+        validators=[identificacion_validator],
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Ej: 12345678901',
+            'maxlength': '11',
+            'pattern': '[0-9]*',
+            'inputmode': 'numeric'
+        })
+    )
+    
+    tipo_usu = forms.ChoiceField(
+        choices=[
+            ('administrador', 'Administrador'),
+            ('operario', 'Operario')
+        ],
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+    
+    p_nombre = forms.CharField(
+        max_length=50,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Primer nombre'
+        })
+    )
+    
+    s_nombre = forms.CharField(
+        max_length=50,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Segundo nombre (opcional)'
+        })
+    )
+    
+    p_apellido = forms.CharField(
+        max_length=50,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Primer apellido'
+        })
+    )
+    
+    s_apellido = forms.CharField(
+        max_length=50,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Segundo apellido (opcional)'
+        })
+    )
+    
+    correo = forms.EmailField(
+        widget=forms.EmailInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'correo@ejemplo.com'
+        })
+    )
+    
+    telefono = forms.CharField(
+        max_length=10,
+        validators=[telefono_validator],
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '3001234567',
+            'maxlength': '10',
+            'pattern': '[0-9]*',
+            'inputmode': 'numeric'
+        })
+    )
+    
+    direccion = forms.CharField(
+        max_length=100,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Dirección completa'
+        })
+    )
+    
+    salario = forms.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'placeholder': '1500000',
+            'step': '0.01'
+        })
+    )
+    
+    fecha_nacimiento = forms.DateField(
+        widget=forms.DateInput(attrs={
+            'class': 'form-control',
+            'type': 'date',
+            'id': 'fecha_nacimiento'
+        })
+    )
+    
+    activo = forms.ChoiceField(
+        choices=[(1, 'Activo'), (0, 'Inactivo')],
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+    
     password = forms.CharField(
-        label='Contraseña',
         widget=forms.PasswordInput(attrs={
             'class': 'form-control',
-            'placeholder': 'Ingrese la contraseña'
+            'placeholder': 'Contraseña',
+            'id': 'password_input'
         }),
-        required=False,
-        help_text='Deje en blanco para mantener la contraseña actual (solo en edición)'
+        help_text='Debe contener al menos 1 mayúscula y 3 números'
     )
     
     password_confirm = forms.CharField(
-        label='Confirmar Contraseña',
         widget=forms.PasswordInput(attrs={
             'class': 'form-control',
-            'placeholder': 'Confirme la contraseña'
+            'placeholder': 'Confirmar contraseña',
+            'id': 'password_confirm_input'
         }),
-        required=False
+        label='Confirmar Contraseña'
     )
     
     class Meta:
         model = Usuarios
         fields = [
-            'num_identificacion',
-            'tipo_usu',
-            'p_nombre',
-            's_nombre',
-            'p_apellido',
-            's_apellido',
-            'correo',
-            'telefono',
-            'salario',
-            'fecha_nacimiento',
-            'direccion',
-            'activo'
+            'num_identificacion', 'tipo_usu', 'p_nombre', 's_nombre',
+            'p_apellido', 's_apellido', 'correo', 'telefono',
+            'direccion', 'salario', 'fecha_nacimiento', 'activo'
         ]
+    
+    def clean_num_identificacion(self):
+        """Valida que el número de identificación sea único y válido"""
+        num_id = self.cleaned_data.get('num_identificacion')
         
-        widgets = {
-            'num_identificacion': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Número de identificación'
-            }),
-            'tipo_usu': forms.Select(attrs={
-                'class': 'form-control'
-            }, choices=[
-                ('administrador', 'Administrador'),
-                ('operario', 'Operario')
-            ]),
-            'p_nombre': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Primer nombre'
-            }),
-            's_nombre': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Segundo nombre (opcional)'
-            }),
-            'p_apellido': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Primer apellido'
-            }),
-            's_apellido': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Segundo apellido (opcional)'
-            }),
-            'correo': forms.EmailInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'correo@ejemplo.com'
-            }),
-            'telefono': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'placeholder': '3001234567'
-            }),
-            'salario': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Salario mensual'
-            }),
-            'fecha_nacimiento': forms.DateInput(attrs={
-                'class': 'form-control',
-                'type': 'date'
-            }),
-            'direccion': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Dirección completa'
-            }),
-            'activo': forms.Select(attrs={
-                'class': 'form-control'
-            }, choices=[
-                (1, 'Activo'),
-                (0, 'Inactivo')
-            ])
-        }
+        if not num_id.isdigit():
+            raise ValidationError('El número de identificación solo puede contener dígitos')
         
-        labels = {
-            'num_identificacion': 'Número de Identificación',
-            'tipo_usu': 'Tipo de Usuario',
-            'p_nombre': 'Primer Nombre',
-            's_nombre': 'Segundo Nombre',
-            'p_apellido': 'Primer Apellido',
-            's_apellido': 'Segundo Apellido',
-            'correo': 'Correo Electrónico',
-            'telefono': 'Teléfono',
-            'salario': 'Salario',
-            'fecha_nacimiento': 'Fecha de Nacimiento',
-            'direccion': 'Dirección',
-            'activo': 'Estado'
-        }
+        if len(num_id) > 11:
+            raise ValidationError('El número de identificación no puede tener más de 11 dígitos')
+        
+        # Verificar si ya existe (excepto en edición)
+        if self.instance.pk:
+            if Usuarios.objects.exclude(pk=self.instance.pk).filter(num_identificacion=num_id).exists():
+                raise ValidationError('Este número de identificación ya está registrado')
+        else:
+            if Usuarios.objects.filter(num_identificacion=num_id).exists():
+                raise ValidationError('Este número de identificación ya está registrado')
+        
+        return num_id
+    
+    def clean_telefono(self):
+        """Valida que el teléfono tenga exactamente 10 dígitos"""
+        telefono = self.cleaned_data.get('telefono')
+        
+        if not telefono.isdigit():
+            raise ValidationError('El teléfono solo puede contener números')
+        
+        if len(telefono) != 10:
+            raise ValidationError('El teléfono debe tener exactamente 10 dígitos')
+        
+        return telefono
+    
+    def clean_fecha_nacimiento(self):
+        """Valida que el usuario sea mayor de 18 años"""
+        fecha_nac = self.cleaned_data.get('fecha_nacimiento')
+        
+        if fecha_nac:
+            hoy = date.today()
+            edad = relativedelta(hoy, fecha_nac).years
+            
+            if edad < 18:
+                raise ValidationError(
+                    f'El usuario debe ser mayor de edad. Edad actual: {edad} años'
+                )
+            
+            if edad > 100:
+                raise ValidationError('La fecha de nacimiento no es válida')
+        
+        return fecha_nac
+    
+    def clean_password(self):
+        """Valida que la contraseña tenga al menos 1 mayúscula y 3 números"""
+        password = self.cleaned_data.get('password')
+        
+        if not password:
+            raise ValidationError('La contraseña es obligatoria')
+        
+        # Verificar longitud mínima
+        if len(password) < 8:
+            raise ValidationError('La contraseña debe tener al menos 8 caracteres')
+        
+        # Contar mayúsculas
+        mayusculas = sum(1 for c in password if c.isupper())
+        if mayusculas < 1:
+            raise ValidationError('La contraseña debe contener al menos 1 letra mayúscula')
+        
+        # Contar números
+        numeros = sum(1 for c in password if c.isdigit())
+        if numeros < 3:
+            raise ValidationError('La contraseña debe contener al menos 3 números')
+        
+        return password
     
     def clean(self):
+        """Validación general del formulario"""
         cleaned_data = super().clean()
         password = cleaned_data.get('password')
         password_confirm = cleaned_data.get('password_confirm')
         
-        # Validar que las contraseñas coincidan si se proporcionaron
-        if password or password_confirm:
+        if password and password_confirm:
             if password != password_confirm:
-                raise forms.ValidationError('Las contraseñas no coinciden')
-        
-        # Si es un nuevo usuario, la contraseña es obligatoria
-        if not self.instance.pk and not password:
-            raise forms.ValidationError('La contraseña es obligatoria para nuevos usuarios')
+                raise ValidationError('Las contraseñas no coinciden')
         
         return cleaned_data
-    
-    def save(self, commit=True):
-        usuario = super().save(commit=False)
-        
-        # Si se proporcionó una contraseña, hashearla
-        password = self.cleaned_data.get('password')
-        if password:
-            usuario.clave = make_password(password)
-        
-        if commit:
-            usuario.save()
-        
-        return usuario
-    
-    from django import forms
-from .models import Proveedor
-
-

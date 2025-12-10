@@ -23,6 +23,7 @@ urlpatterns = [
     path('inventario/salida/ajuste/', views.registrar_salida_inventario_ajuste, name='registrar_salida_inventario_ajuste'),
     path('inventario/detalle-producto/<int:producto_id>/', views.detalle_producto_modal, name='detalle_producto_modal'),
     path('producto/reporte/', views.generar_reporte_productos, name='generar_reporte_productos'),
+    path('producto/editar-maestro/<int:id>/', views.editar_producto_maestro, name='editar_producto_maestro'),
 
     #PROVEEDOR
     path('listar_proveedores/', views.listar_proveedores, name='listar_proveedores'),

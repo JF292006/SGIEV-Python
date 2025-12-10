@@ -12,7 +12,6 @@
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
 
     <style>
-        
         .spin {
             animation: spin 1s linear infinite;
         }
@@ -115,7 +114,6 @@
     </div>
 
         <div class="w-100">
-            <!-- Navbar -->
             <nav class="navbar navbar-expand-lg navbar-light bg-light">
                 <div class="container-fluid">
                     <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent">
@@ -146,7 +144,6 @@
                 </div>
             </nav>
 
-
             <div id="content" class="p-4">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h2 class="font-weight-bold text-success">Gestión de Inventario</h2>
@@ -163,6 +160,15 @@
                         </button>
                     </div>
                 </div>
+
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                {% endfor %}
 
                 <div class="row">
                     
@@ -185,30 +191,43 @@
                                     <tr>
                                         <th>Producto General</th>
                                         <th>Categoría</th>
-                                        <th>Stock TOTAL </th> 
+                                        <th class="text-right">Precio Venta</th>
+                                        <th class="text-center">Stock TOTAL</th>
                                         <th>Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for producto in producto %}
-                                    <tr id="row-{{ producto.lote_id_representativo }}">
+                                    <tr>
                                         <td title="{{ producto.nombre_producto }} {{ producto.descripcion_producto }}">
                                             {{ producto.nombre_producto|truncatechars:30 }} {{ producto.descripcion_producto }}
                                         </td>
                                         <td>
                                             {{ producto.categoria_idcategoria__nombre_categoria }}
                                         </td>
-                                        <td>
+                                        <td class="text-right">
+                                            <strong>$ {{ producto.precio_venta|floatformat:2 }}</strong>
+                                            {% if producto.precio_venta == 0 %}
+                                                <span class="badge badge-warning">Sin definir</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
                                             <b>{{ producto.stock_total }}</b>
                                         </td>
                                         <td>
                                             <button class="btn btn-sm btn-info view-details-btn" 
                                                     data-toggle="modal" 
                                                     data-target="#DetalleProductoModal" 
-                                                    data-producto-id="{{ producto.lote_id_representativo }}"
+                                                    data-producto-id="{{ producto.id }}"
                                                     title="Ver Lotes Individuales y Detalles">
                                                 <i class="icon ion-md-eye"></i> Lotes
                                             </button>
+                                            
+                                            <a href="{% url 'editar_producto_maestro' producto.id %}" 
+                                               class="btn btn-sm btn-warning" 
+                                               title="Editar Producto y Precio de Venta">
+                                                <i class="icon ion-md-pricetag"></i> Editar Precio
+                                            </a>
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -276,13 +295,14 @@
         </div>
     </div>
 
-    <div class="modal fade" id="SalidaInventarioModal" tabindex="-1" aria-labelledby="SalidaInventarioModalLabel" aria-hidden="true">
+    <!-- MODAL SALIDA INVENTARIO -->
+    <div class="modal fade" id="SalidaInventarioModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title" id="SalidaInventarioModalLabel"><i class="icon ion-md-alert mr-2"></i> Registrar Salida/Ajuste de Inventario por Lote</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
+                    <h5 class="modal-title"><i class="icon ion-md-alert mr-2"></i> Registrar Salida/Ajuste de Inventario por Lote</h5>
+                    <button type="button" class="close" data-dismiss="modal">
+                        <span>&times;</span>
                     </button>
                 </div>
                 <form action="{% url 'registrar_salida_inventario_ajuste' %}" method="post"> 
@@ -293,11 +313,9 @@
                             <select class="form-control" id="select_producto_general" required>
                                 <option value="">Seleccione el producto</option>
                                 {% for p in producto %} 
-                                    {% ifchanged p.nombre_producto %} 
                                     <option value="{{ p.nombre_producto }} {{ p.descripcion_producto }}">
                                         {{ p.nombre_producto }} {{ p.descripcion_producto }}
                                     </option>
-                                    {% endifchanged %}
                                 {% endfor %}
                             </select>
                         </div>
@@ -335,19 +353,20 @@
         </div>
     </div>
 
-    <div class="modal fade" id="DetalleProductoModal" tabindex="-1" aria-labelledby="DetalleProductoModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
+    <!-- MODAL DETALLE PRODUCTO -->
+    <div class="modal fade" id="DetalleProductoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header bg-info text-white">
-                    <h5 class="modal-title" id="DetalleProductoModalLabel">
+                    <h5 class="modal-title">
                         <i class="icon ion-md-eye mr-2"></i> Detalle Completo del Producto y Lotes
                     </h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
+                    <button type="button" class="close" data-dismiss="modal">
+                        <span>&times;</span>
                     </button>
                 </div>
                 <div class="modal-body" id="modal-detalle-body">
-                    <div class="text-center p-5">Haga clic en el ojo de un producto para ver sus detalles...</div>
+                    <div class="text-center p-5">Haga clic en "Ver Lotes" para ver detalles...</div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
@@ -356,13 +375,14 @@
         </div>
     </div>
 
-    <div class="modal fade" id="ReporteProductosModal" tabindex="-1" aria-labelledby="ReporteProductosModalLabel" aria-hidden="true">
+    <!-- MODAL REPORTE -->
+    <div class="modal fade" id="ReporteProductosModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-info text-white">
-                    <h5 class="modal-title" id="ReporteProductosModalLabel"><i class="icon ion-md-document mr-2"></i> Generar Reporte de Inventario</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
+                    <h5 class="modal-title"><i class="icon ion-md-document mr-2"></i> Generar Reporte de Inventario</h5>
+                    <button type="button" class="close" data-dismiss="modal">
+                        <span>&times;</span>
                     </button>
                 </div>
                 <form action="{% url 'generar_reporte_productos' %}" method="get"> 
@@ -373,14 +393,12 @@
                             <label for="filtro_categoria">Filtrar por Categoría:</label>
                             <select class="form-control" id="filtro_categoria" name="categoria">
                                 <option value="">Todas las Categorías</option>
-                                {% for producto in producto %} 
-                                    {% if producto.categoria_idcategoria %}
-                                        <option value="{{ producto.categoria_idcategoria.id }}" title="{{ producto.categoria_idcategoria.nombre_categoria }}">
-                                            {{ producto.categoria_idcategoria.nombre_categoria }}
-                                        </option>
-                                    {% endif %}
+                                {% for p in producto %} 
+                                    <option value="{{ p.id }}">
+                                        {{ p.categoria_idcategoria__nombre_categoria }}
+                                    </option>
                                 {% endfor %}
-                                </select>
+                            </select>
                         </div>
                         
                         <div class="form-group">
@@ -410,14 +428,14 @@
         </div>
     </div>
 
-
-    <script src="https://code.jquery.com/jquery-3.5.1.min.js" integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0=" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js" integrity="sha384-+sLIOodYLS7CIrQpBjl+C7nPvqq+FbNUBDunl/OZv93DB7Ln/533i8e/mZXLi/P+" crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js"></script>
     
     <script>
-        
+        function toggleSidebar() {
+            document.getElementById('sidebar-container').classList.toggle('active');
+        }
 
         const lotesJsonString = '{{ lotes_json | safe }}'; 
         const lotesData = JSON.parse(lotesJsonString);
@@ -437,8 +455,6 @@
             cantidadInput.value = ''; 
             
             if (nombreProductoSeleccionado) {
-                
-               
                 const lotesFiltrados = lotesData.filter(lote => 
                     lote.nombre_producto_completo.trim() === nombreProductoSeleccionado
                 );
@@ -460,7 +476,6 @@
             loteSelect.dispatchEvent(new Event('change'));
         }
 
-        
         function actualizarStockYCampos() {
             const selectedOption = loteSelect.options[loteSelect.selectedIndex];
             
@@ -481,17 +496,12 @@
         productoSelect.addEventListener('change', llenarLotes);
         loteSelect.addEventListener('change', actualizarStockYCampos);
 
-
-        
         $(document).ready(function() {
-        
             $('.view-details-btn').on('click', function() {
                 const productoId = $(this).data('producto-id');
                 const modalBody = $('#modal-detalle-body');
                 
-                
                 modalBody.html('<div class="text-center p-5"><i class="icon ion-md-refresh spin lead text-info"></i> Cargando detalles...</div>');
-                
                 
                 const urlDetalle = `{% url 'detalle_producto_modal' 0 %}`.replace('0', productoId); 
 
@@ -499,33 +509,26 @@
                     url: urlDetalle,
                     type: 'GET',
                     success: function(data) {
-                        
                         modalBody.html(data); 
                     },
                     error: function() {
-                        modalBody.html('<div class="alert alert-danger">Error al cargar los detalles del producto. Asegúrate de que la URL es correcta en urls.py.</div>');
+                        modalBody.html('<div class="alert alert-danger">Error al cargar los detalles.</div>');
                     }
                 });
             });
         });
 
-  
         const inputFiltro = $('#filtroTablaProductos');
         const tablaBody = $('.table-responsive table tbody');
 
         function aplicarFiltro() {
-            
             const textoBusqueda = inputFiltro.val().toLowerCase();
 
             tablaBody.find('tr').each(function() {
                 const row = $(this);
-                
-                
                 const productoGeneral = row.children('td:eq(0)').text().toLowerCase();
-                
                 const categoria = row.children('td:eq(1)').text().toLowerCase(); 
 
-                
                 if (productoGeneral.includes(textoBusqueda) || categoria.includes(textoBusqueda)) {
                     row.show(); 
                 } else {
@@ -536,12 +539,10 @@
 
         inputFiltro.on('keyup', aplicarFiltro);
 
-
         $('#limpiarFiltro').on('click', function() {
             inputFiltro.val(''); 
-            aplicarFiltro();    
+            aplicarFiltro();    
         });
-
     </script>
 </body>
 </html>

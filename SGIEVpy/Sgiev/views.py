@@ -40,15 +40,16 @@ from django.views.decorators.cache import never_cache
 from django.http import HttpResponseRedirect 
 from django.urls import reverse
 from django.utils import timezone
-from uuid import uuid4
 from django.db.models import Sum, Count, Q, F,Min
 from django.utils import timezone
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 import json
 from django.db import IntegrityError, transaction
-
-
+import uuid
+from uuid import uuid4
+from django.db.models import Sum, F, Q, Count, Avg
+from django.db.models.functions import Coalesce
 
 
 
@@ -90,24 +91,86 @@ def dashboard_view(request):
         envios_query = Envio.objects.filter(usuarios_id_usuario=usuario)
 
     # ===== ESTADÍSTICAS DE VENTAS =====
-    ventas_mes = ventas_query.filter(
-        fecha_factura__gte=inicio_mes,
-        estado_pago__in=['pagado', 'parcial']
-    )
+    ventas_mes = ventas_query.filter(fecha_factura__gte=inicio_mes)
 
-    ingresos_mes = ventas_mes.aggregate(total=Sum('valor_total'))['total'] or Decimal('0')
+    # CALCULAR INGRESOS REALES (solo lo abonado)
+    ingresos_reales_mes = Decimal('0')
+    for venta in ventas_mes:
+        if venta.estado_pago == 'pagado':
+            ingresos_reales_mes += venta.valor_total
+        elif venta.estado_pago == 'parcial':
+            ingresos_reales_mes += venta.abono  # Solo lo abonado
+        # 'pendiente' no suma nada
 
-    ventas_totales = ventas_query.filter(
-        estado_pago__in=['pagado', 'parcial']
-    ).aggregate(total=Sum('valor_total'))['total'] or Decimal('0')
+    # VENTAS TOTALES (históricas, solo lo realmente cobrado)
+    ventas_totales = Decimal('0')
+    for venta in ventas_query.all():
+        if venta.estado_pago == 'pagado':
+            ventas_totales += venta.valor_total
+        elif venta.estado_pago == 'parcial':
+            ventas_totales += venta.abono
 
+    # PRODUCTOS VENDIDOS DEL MES
     try:
         productos_vendidos = Venta_has_producto.objects.filter(
-            venta_idfactura__in=ventas_query,
+            venta_idfactura__in=ventas_mes,
             venta_idfactura__fecha_factura__gte=inicio_mes
         ).aggregate(total=Sum('cantidad'))['total'] or 0
     except Exception:
         productos_vendidos = 0
+
+    # Mes anterior para comparación
+    inicio_mes_anterior = (inicio_mes - timedelta(days=1)).replace(day=1)
+    ventas_mes_anterior_query = ventas_query.filter(
+        fecha_factura__gte=inicio_mes_anterior,
+        fecha_factura__lt=inicio_mes
+    )
+
+    ingresos_mes_anterior = Decimal('0')
+    for venta in ventas_mes_anterior_query:
+        if venta.estado_pago == 'pagado':
+            ingresos_mes_anterior += venta.valor_total
+        elif venta.estado_pago == 'parcial':
+            ingresos_mes_anterior += venta.abono
+
+    if ingresos_mes_anterior > 0:
+        ingresos_porcentaje = round(
+            ((ingresos_reales_mes - ingresos_mes_anterior) / ingresos_mes_anterior) * 100, 1
+        )
+    else:
+        ingresos_porcentaje = 100 if ingresos_reales_mes > 0 else 0
+
+    # ===== DATOS DEL GRÁFICO (últimos 6 meses con ingresos reales) =====
+    meses_labels = []
+    meses_valores = []
+
+    meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+    for i in range(5, -1, -1):
+        fecha_mes = hoy - timedelta(days=30 * i)
+        inicio = fecha_mes.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        if i == 0:
+            fin = hoy
+        else:
+            siguiente_mes = inicio + timedelta(days=32)
+            fin = siguiente_mes.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        ventas_rango = ventas_query.filter(
+            fecha_factura__gte=inicio,
+            fecha_factura__lt=fin
+        )
+        
+        total_mes = Decimal('0')
+        for venta in ventas_rango:
+            if venta.estado_pago == 'pagado':
+                total_mes += venta.valor_total
+            elif venta.estado_pago == 'parcial':
+                total_mes += venta.abono
+        
+        mes_nombre = meses[fecha_mes.month - 1]
+        meses_labels.append(mes_nombre)
+        meses_valores.append(float(total_mes))
 
     # ===== ESTADÍSTICAS DE ENVÍOS =====
     envios_pendientes = envios_query.filter(estado_envio='pendiente').count()
@@ -166,48 +229,6 @@ def dashboard_view(request):
     ventas_recientes = list(ventas_query.order_by('-fecha_factura')[:5])
     historial_ventas = list(ventas_query.order_by('-fecha_factura')[:10])
 
-    # ===== DATOS DEL GRÁFICO =====
-    meses_labels = []
-    meses_valores = []
-
-    meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul',
-             'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-
-    for i in range(5, -1, -1):
-        fecha_mes = hoy - timedelta(days=30 * i)
-        inicio = fecha_mes.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-        if i == 0:
-            fin = hoy
-        else:
-            siguiente_mes = inicio + timedelta(days=32)
-            fin = siguiente_mes.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-        total_mes = ventas_query.filter(
-            fecha_factura__gte=inicio,
-            fecha_factura__lt=fin,
-            estado_pago__in=['pagado', 'parcial']
-        ).aggregate(total=Sum('valor_total'))['total'] or Decimal('0')
-
-        mes_nombre = meses[fecha_mes.month - 1]
-        meses_labels.append(mes_nombre)
-        meses_valores.append(float(total_mes))
-
-    # ===== PORCENTAJES =====
-    inicio_mes_anterior = (inicio_mes - timedelta(days=1)).replace(day=1)
-    ventas_mes_anterior = ventas_query.filter(
-        fecha_factura__gte=inicio_mes_anterior,
-        fecha_factura__lt=inicio_mes,
-        estado_pago__in=['pagado', 'parcial']
-    ).aggregate(total=Sum('valor_total'))['total'] or Decimal('0')
-
-    if ventas_mes_anterior > 0:
-        ingresos_porcentaje = round(
-            ((ingresos_mes - ventas_mes_anterior) / ventas_mes_anterior) * 100, 1
-        )
-    else:
-        ingresos_porcentaje = 100 if ingresos_mes > 0 else 0
-
     # ===== ENVÍOS PRÓXIMOS =====
     envios_proximos = list(envios_query.filter(
         estado_envio='en_transito',
@@ -220,7 +241,7 @@ def dashboard_view(request):
         'es_admin': es_admin,
 
         'estadisticas_dashboard': {
-            'ingresos_mes': ingresos_mes,
+            'ingresos_mes': ingresos_reales_mes,
             'ingresos_porcentaje': abs(ingresos_porcentaje),
             'ingresos_crecimiento': ingresos_porcentaje >= 0,
             'ventas_totales': ventas_totales,
@@ -351,36 +372,48 @@ def eliminar_categoria(request, id):
 #PRODUCTOS
 
 
+# ===== VISTA ACTUALIZADA: list_producto =====
 @login_required
 def list_producto(request):
-    
-    productos_agrupados = Producto.objects.filter(activo=1).values(
+    # Productos agrupados (maestros) con precio de venta del catálogo
+    productos_agrupados = Producto.objects.filter(
+        activo=1,
+        codigo_barras='SIN_LOTE_CATALOGO'  # Solo productos maestros
+    ).select_related('categoria_idcategoria').values(
+        'id',
         'nombre_producto', 
         'descripcion_producto',
         'categoria_idcategoria__nombre_categoria',
+        'precio_venta',  # Precio de venta del maestro
+        'precio_compra',
+        'margen_ganancia'
     ).annotate(
-        stock_total=Sum('stock_actual')
+        stock_total=Coalesce(
+            Sum('stock_actual', filter=Q(activo=1)),
+            0
+        )
     ).order_by('nombre_producto')
 
-    
+    # Calcular stock total real sumando todos los lotes
     productos_final = []
-    for producto_agrupado in productos_agrupados:
-        
-        lote_representativo = Producto.objects.filter(
-            nombre_producto=producto_agrupado['nombre_producto'],
-            descripcion_producto=producto_agrupado['descripcion_producto'],
+    for producto_maestro in productos_agrupados:
+        # Sumar stock de todos los lotes de este producto
+        stock_real = Producto.objects.filter(
+            nombre_producto=producto_maestro['nombre_producto'],
+            descripcion_producto=producto_maestro['descripcion_producto'],
             activo=1
-        ).values('id').first()
+        ).exclude(codigo_barras='SIN_LOTE_CATALOGO').aggregate(
+            total=Sum('stock_actual')
+        )['total'] or 0
         
-        if lote_representativo:
-            producto_agrupado['lote_id_representativo'] = lote_representativo['id']
-            productos_final.append(producto_agrupado)
+        producto_maestro['stock_total'] = stock_real
+        productos_final.append(producto_maestro)
 
-    
+    # Lotes para el modal de salida
     producto_lotes_original = Producto.objects.select_related(
         'categoria_idcategoria', 
         'proveedor_idproveedor'
-    ).all()
+    ).exclude(codigo_barras='SIN_LOTE_CATALOGO').filter(activo=1)
     
     lotes_disponibles = []
     for p in producto_lotes_original:
@@ -399,12 +432,10 @@ def list_producto(request):
     lotes_json_string = json.dumps(lotes_disponibles)
     lotes_json_safe = mark_safe(lotes_json_string)
     
-    
     historial_compras = Compra_proveedor.objects.all().order_by('-fecha_compra')[:10]
     historial_salidas = Movimiento_inventario.objects.filter(
         tipo_movimiento__in=['ajuste', 'venta']
     ).order_by('-fecha_movimiento')[:15]
-
 
     usuario = request.user
     es_admin = request.user.tipo_usu == 'administrador'
@@ -414,30 +445,150 @@ def list_producto(request):
         'lotes_json': lotes_json_safe,
         'historial_compras': historial_compras,
         'historial_salidas': historial_salidas,
-
-
         'usuario': usuario,
         'es_admin': es_admin,
     }
     
     return render(request, 'producto/index.html', data)
 
+# ===== NUEVA VISTA: Editar Producto Maestro (con precio de venta) =====
+@login_required
+def editar_producto_maestro(request, id):
+    """
+    Edita el producto maestro (catálogo), incluyendo precio de venta.
+    Solo afecta al registro SIN_LOTE_CATALOGO.
+    """
+    producto_maestro = get_object_or_404(
+        Producto, 
+        id=id, 
+        codigo_barras='SIN_LOTE_CATALOGO'
+    )
+    categorias = Categoria.objects.filter(activo=1)
+    proveedores = Proveedor.objects.filter(activo=1)
 
+    usuario = request.user
+    es_admin = request.user.tipo_usu == 'administrador'
+
+    if request.method == "POST":
+        nombre = request.POST.get('nombre_producto', '').strip()
+        descripcion = request.POST.get('descripcion_producto', '').strip()
+        categoria_id = request.POST.get('categoria_idcategoria')
+        proveedor_id = request.POST.get('proveedor_idproveedor')
+        
+        # Validar unicidad (excluyendo el actual)
+        existe_duplicado = Producto.objects.filter(
+            nombre_producto=nombre,
+            descripcion_producto=descripcion,
+            codigo_barras="SIN_LOTE_CATALOGO"
+        ).exclude(id=producto_maestro.id).exists()
+        
+        if existe_duplicado:
+            messages.error(
+                request, 
+                f"Ya existe otro producto maestro con el nombre '{nombre}' y la misma descripción."
+            )
+            return redirect('editar_producto_maestro', id=id)
+        
+        # Actualizar datos
+        producto_maestro.nombre_producto = nombre
+        producto_maestro.descripcion_producto = descripcion
+        producto_maestro.registrosanitario = request.POST.get('registrosanitario', '')
+        
+        try:
+            nuevo_precio_compra = Decimal(request.POST.get('precio_compra') or '0')
+            nuevo_precio_venta = Decimal(request.POST.get('precio_venta') or '0')
+            
+            producto_maestro.precio_compra = nuevo_precio_compra
+            producto_maestro.precio_venta = nuevo_precio_venta
+            
+            # Recalcular margen
+            if nuevo_precio_compra > 0 and nuevo_precio_venta > 0:
+                margen = ((nuevo_precio_venta - nuevo_precio_compra) / nuevo_precio_compra) * Decimal('100.00')
+                producto_maestro.margen_ganancia = margen.quantize(Decimal('0.01'))
+            else:
+                producto_maestro.margen_ganancia = Decimal('0.00')
+                
+        except (InvalidOperation, ValueError):
+            messages.error(request, "Error en formato de precios")
+            return redirect('editar_producto_maestro', id=id)
+        
+        try:
+            producto_maestro.stock_minimo = int(request.POST.get('stock_minimo') or 0)
+            producto_maestro.stock_maximo = int(request.POST.get('stock_maximo') or 0)
+        except:
+            pass
+        
+        producto_maestro.categoria_idcategoria = get_object_or_404(Categoria, id=categoria_id)
+        producto_maestro.proveedor_idproveedor = get_object_or_404(Proveedor, id=proveedor_id)
+        
+        producto_maestro.save()
+        
+        # Actualizar todos los lotes con el nuevo precio de venta y margen
+        Producto.objects.filter(
+            nombre_producto=nombre,
+            descripcion_producto=descripcion,
+            activo=1
+        ).exclude(codigo_barras='SIN_LOTE_CATALOGO').update(
+            precio_venta=producto_maestro.precio_venta,
+            margen_ganancia=producto_maestro.margen_ganancia
+        )
+        
+        messages.success(request, f"Producto maestro '{nombre}' actualizado. Precio de venta aplicado a todos los lotes.")
+        return redirect('list_producto')
+
+    data = {
+        'producto': producto_maestro,
+        'categorias': categorias,
+        'proveedores': proveedores,
+        'usuario': usuario,
+        'es_admin': es_admin,
+    }
+    return render(request, 'producto/editar_maestro.html', data)
+
+# ===== VISTA ACTUALIZADA: detalle_producto_modal =====
 def detalle_producto_modal(request, producto_id):
-    producto = get_object_or_404(Producto, pk=producto_id)
+    # Puede ser un lote o el maestro, obtener el maestro
+    lote_o_maestro = get_object_or_404(Producto, pk=producto_id)
     
+    nombre_prod_general = lote_o_maestro.nombre_producto
+    descripcion_prod_general = lote_o_maestro.descripcion_producto
+    
+    # Obtener el producto maestro
+    try:
+        producto_maestro = Producto.objects.get(
+            nombre_producto=nombre_prod_general,
+            descripcion_producto=descripcion_prod_general,
+            codigo_barras='SIN_LOTE_CATALOGO',
+            activo=1
+        )
+    except Producto.DoesNotExist:
+        producto_maestro = lote_o_maestro
+    
+    # Todos los lotes (excluyendo el maestro)
+    todos_los_lotes_del_producto = Producto.objects.select_related(
+        'categoria_idcategoria', 'proveedor_idproveedor'
+    ).filter(
+        nombre_producto=nombre_prod_general,
+        descripcion_producto=descripcion_prod_general,
+        activo=1
+    ).exclude(codigo_barras='SIN_LOTE_CATALOGO').order_by('fecha_vencimiento', 'codigo_barras')
+    
+    stock_total_data = todos_los_lotes_del_producto.aggregate(total_stock=Sum('stock_actual'))
+    stock_total = stock_total_data['total_stock'] or 0
 
+    ids_lotes = [l.id for l in todos_los_lotes_del_producto]
     movimientos_producto = Movimiento_inventario.objects.filter(
-        producto_idproducto=producto
-    ).order_by('-fecha_movimiento')[:5] 
+        producto_idproducto__in=ids_lotes
+    ).order_by('-fecha_movimiento')[:10]
     
     context = {
-        'p': producto,
+        'producto_maestro': producto_maestro,
+        'lotes': todos_los_lotes_del_producto,
+        'stock_total': stock_total,
         'movimientos': movimientos_producto,
     }
- 
-    return render(request, 'producto/detalle_producto_modal_content.html', context)
 
+    return render(request, 'producto/detalle_producto_modal_content.html', context)
 @login_required
 def registro_producto(request):
     usuario = request.user  
@@ -519,102 +670,68 @@ def registro_producto(request):
 
     return render_form_with_data(request)
 
+# ===== VISTA ACTUALIZADA: Editar Lote Individual =====
+@login_required
+def pre_editar_producto(request, id):
+    """
+    Edita un lote individual. Solo permite editar:
+    - Stock actual
+    - Fecha de vencimiento
+    - Stock mínimo/máximo
+    NO permite cambiar nombre, descripción, categoría (son del maestro)
+    """
+    lote = get_object_or_404(Producto, id=id)
+    
+    # Verificar que NO sea el maestro
+    if lote.codigo_barras == 'SIN_LOTE_CATALOGO':
+        messages.warning(request, "Para editar el producto maestro, use la opción 'Editar Precio' desde el listado.")
+        return redirect('list_producto')
+    
+    usuario = request.user
+    es_admin = request.user.tipo_usu == 'administrador'
 
-
+    data = {
+        'lote': lote,
+        'usuario': usuario,
+        'es_admin': es_admin
+    }
+    return render(request, 'producto/editar_lote.html', data)
 
 
 @login_required
-def pre_editar_producto(request, id):
-    
-    producto = get_object_or_404(Producto, id=id)
-    categorias = Categoria.objects.filter(activo=1)
-    proveedores = Proveedor.objects.filter(activo=1)
-
-    usuario = request.user                               
-    es_admin = request.user.tipo_usu == 'administrador'  
-
-    data = {
-        'producto': producto,
-        'categorias': categorias,
-        'proveedores': proveedores,
-        'usuario': usuario,     
-        'es_admin': es_admin   
-    }
-
-    return render(request, 'producto/editarprod.html', data)
-
-
-
 def editar_producto(request, id):
+    """
+    Guarda cambios de un lote individual
+    """
     if request.method == "POST":
-        producto = get_object_or_404(Producto, id=id)
-
-        nombre = request.POST.get('nombre_producto')
-        descripcion = request.POST.get('descripcion_producto')
-        codigo = request.POST.get('codigo_barras') 
-        if codigo == "SIN_LOTE_CATALOGO":
-
-            existe_duplicado = Producto.objects.filter(
-                nombre_producto=nombre,
-                descripcion_producto=descripcion,
-                codigo_barras="SIN_LOTE_CATALOGO"
-            ).exclude(id=producto.id).exists()
+        lote = get_object_or_404(Producto, id=id)
+        
+        # Solo permitir edición de campos específicos del lote
+        try:
+            lote.stock_actual = int(request.POST.get('stock_actual') or 0)
+        except:
+            lote.stock_actual = 0
             
-            if existe_duplicado:
-                messages.error(
-                    request, 
-                    f"Error de Unicidad: Ya existe otro producto de catálogo maestro con el nombre '{nombre}' y la misma descripción. No se guardaron los cambios."
-                )
-                return redirect('pre_editar_producto', id=id)
+        try:
+            lote.stock_minimo = int(request.POST.get('stock_minimo') or 0)
+        except:
+            lote.stock_minimo = 0
+            
+        try:
+            lote.stock_maximo = int(request.POST.get('stock_maximo') or 0)
+        except:
+            lote.stock_maximo = 0
+
+        fecha_venc = request.POST.get('fecha_vencimiento')
+        if fecha_venc:
+            lote.fecha_vencimiento = fecha_venc
         
-        producto.nombre_producto = nombre
-        producto.descripcion_producto = descripcion
-        producto.codigo_barras = codigo
-        producto.registrosanitario = request.POST.get('registrosanitario')
-
-        try:
-            producto.precio_compra = Decimal(request.POST.get('precio_compra') or '0')
-        except InvalidOperation:
-            producto.precio_compra = Decimal('0.00')
-
+        lote.registrosanitario = request.POST.get('registrosanitario', '')
         
-        try:
-            producto.precio_venta = Decimal(request.POST.get('precio_venta') or '0')
-        except InvalidOperation:
-            producto.precio_venta = Decimal('0.00')
-        try:
-            producto.margen_ganancia = Decimal(request.POST.get('margen_ganancia') or '0')
-        except InvalidOperation:
-            producto.margen_ganancia = Decimal('0.00')
-
-        try:
-            producto.stock_actual = int(request.POST.get('stock_actual') or 0)
-        except:
-            producto.stock_actual = 0
-        try:
-            producto.stock_minimo = int(request.POST.get('stock_minimo') or 0)
-        except:
-            producto.stock_minimo = 0
-        try:
-            producto.stock_maximo = int(request.POST.get('stock_maximo') or 0)
-        except:
-            producto.stock_maximo = 0
-
-        producto.fecha_vencimiento = request.POST.get('fecha_vencimiento')
-
-
-        categoria_id = request.POST.get('categoria_idcategoria')
-        proveedor_id = request.POST.get('proveedor_idproveedor')
-        producto.categoria_idcategoria = get_object_or_404(Categoria, id=categoria_id)
-        producto.proveedor_idproveedor = get_object_or_404(Proveedor, id=proveedor_id)
-
-        producto.activo = request.POST.get('activo') or producto.activo
-
-        producto.save()
-        messages.success(request, f"El producto '{nombre}' ha sido actualizado exitosamente.")
+        lote.save()
+        messages.success(request, f"Lote '{lote.codigo_barras}' actualizado exitosamente.")
 
     return redirect('list_producto')
-
 
 @transaction.atomic
 def eliminar_producto(request, id):
@@ -939,24 +1056,29 @@ def obtener_productos_por_proveedor(request, proveedor_id):
     
     return JsonResponse({'productos': lista_productos})
 
+
 def _get_carrito(request, idproveedor):
     carrito_key = f'carrito_compra_{idproveedor}'
     return request.session.get(carrito_key, [])
+
 
 def _update_carrito(request, idproveedor, carrito):
     carrito_key = f'carrito_compra_{idproveedor}'
     request.session[carrito_key] = carrito
     request.session.modified = True
 
+
 def _calcular_totales_carrito(carrito):
     subtotal_compra = Decimal('0.00')
     for item in carrito:
-        subtotal_compra += item['subtotal']
+        # Convertir de float a Decimal
+        subtotal_compra += Decimal(str(item['subtotal']))
     
     iva_compra = subtotal_compra * Decimal('0.19')
     total_compra = subtotal_compra + iva_compra
 
     return subtotal_compra.quantize(Decimal('0.01')), iva_compra.quantize(Decimal('0.01')), total_compra.quantize(Decimal('0.01'))
+
 
 @transaction.atomic
 @login_required 
@@ -972,7 +1094,6 @@ def crear_compra_proveedor(request, idproveedor):
         proveedor_idproveedor=proveedor
     ).order_by('nombre_producto')
 
-    
     stock_consolidado = Producto.objects.filter(
         nombre_producto__in=[p.nombre_producto for p in productos_maestros]
     ).values(
@@ -983,22 +1104,15 @@ def crear_compra_proveedor(request, idproveedor):
     
     stock_dict = {item['nombre_producto']: item['stock_total'] for item in stock_consolidado}
 
-    
     for p in productos_maestros:
         p.stock_actual = stock_dict.get(p.nombre_producto, 0)
-    
-    
     
     carrito = _get_carrito(request, idproveedor)
     subtotal_compra, iva_compra, total_compra = _calcular_totales_carrito(carrito)
     
     if request.method == "POST":
         
-        
-        
         if 'agregar_producto' in request.POST:
-      
-            
             tipo = request.POST.get("tipo_producto")
             fecha_vencimiento_detalle = request.POST.get("fecha_vencimiento") or None
             lote = request.POST.get("lote", "")
@@ -1016,28 +1130,21 @@ def crear_compra_proveedor(request, idproveedor):
                 
             subtotal_linea = cantidad * precio_unitario
 
-            
             producto_id = None
             nombre_producto = ""
 
             if tipo == "nuevo":
-              
                 categoria_id = request.POST.get('categoria')
                 nombre_producto_post = request.POST.get('nombre_producto')
                 
-                
-               
                 if not categoria_id or not nombre_producto_post:
                     messages.error(request, "Nombre y Categoría son requeridos para el producto nuevo.")
                     return redirect("crear_compra_proveedor", idproveedor=idproveedor)
                 
                 categoria_obj = get_object_or_404(Categoria, id=categoria_id)
                 
-               
                 precio_venta = Decimal('0.00')
                 margen_calculado = Decimal('0.00')
-                
-                
 
                 producto = Producto.objects.create(
                     nombre_producto=nombre_producto_post,
@@ -1045,11 +1152,12 @@ def crear_compra_proveedor(request, idproveedor):
                     codigo_barras='SIN_LOTE_CATALOGO', 
                     registrosanitario=request.POST.get('registrosanitario', ''),
                     precio_compra=precio_unitario, 
-                    precio_venta=precio_venta, 
+                    precio_venta=precio_venta,
                     margen_ganancia=margen_calculado, 
                     stock_actual=0, 
                     stock_minimo=int(request.POST.get('stock_minimo') or 1),
                     stock_maximo=int(request.POST.get('stock_maximo') or 1000),
+                    fecha_vencimiento=date(2099, 12, 31),
                     categoria_idcategoria=categoria_obj, 
                     proveedor_idproveedor_id=proveedor.id,
                     activo=1
@@ -1057,7 +1165,7 @@ def crear_compra_proveedor(request, idproveedor):
                 producto_id = producto.id
                 nombre_producto = producto.nombre_producto
                 
-            else: 
+            else:
                 producto_id = request.POST.get("producto_id")
                 if not producto_id:
                     messages.error(request, "Debe seleccionar un producto existente.")
@@ -1066,29 +1174,25 @@ def crear_compra_proveedor(request, idproveedor):
                 producto = get_object_or_404(Producto, id=producto_id)
                 nombre_producto = producto.nombre_producto
 
-
-            
             item_carrito = {
                 'temp_id': str(uuid.uuid4()),
                 'producto_id': producto_id,
                 'nombre': nombre_producto,
                 'cantidad': cantidad,
-                'precio': precio_unitario,
-                'subtotal': subtotal_linea.quantize(Decimal('0.01')),
+                'precio': float(precio_unitario),
+                'subtotal': float(subtotal_linea.quantize(Decimal('0.01'))),
                 'lote': lote,
                 'fecha_vencimiento': fecha_vencimiento_detalle,
-                
                 'proveedor_id': proveedor.id, 
             }
+
             carrito.append(item_carrito)
             _update_carrito(request, idproveedor, carrito)
 
             messages.success(request, f"Producto '{nombre_producto}' añadido a la lista de compra.")
             return redirect("crear_compra_proveedor", idproveedor=idproveedor)
 
-
         elif 'finalizar_compra' in request.POST:
-            
             
             if not carrito:
                 messages.error(request, "La lista de compra está vacía.")
@@ -1098,9 +1202,7 @@ def crear_compra_proveedor(request, idproveedor):
             observaciones = request.POST.get("observaciones", "")
             numero_factura = request.POST.get("numero_factura", "")
             
-            
             subtotal_compra, iva_compra, total_compra = _calcular_totales_carrito(carrito)
-            
             
             compra = Compra_proveedor.objects.create(
                 numero_factura_compra=numero_factura if numero_factura else f"CMP{Compra_proveedor.objects.count()+1}",
@@ -1116,70 +1218,58 @@ def crear_compra_proveedor(request, idproveedor):
             for item in carrito:
                 producto_maestro = get_object_or_404(Producto, id=item['producto_id'])
                 
-                
-                precio_unitario = item['precio']
-                precio_venta_maestro = producto_maestro.precio_venta
-                
-                if precio_unitario > Decimal('0') and precio_venta_maestro > Decimal('0'):
-                    nuevo_margen = ((precio_venta_maestro - precio_unitario) / precio_unitario) * Decimal('100.00')
-                    producto_maestro.margen_ganancia = nuevo_margen.quantize(Decimal('0.01'))
-              
+                precio_unitario = Decimal(str(item['precio']))
+                fecha_vencimiento_lote = item.get('fecha_vencimiento') or date(2099, 12, 31)
                 
                 producto_maestro.precio_compra = precio_unitario
+                
+                if producto_maestro.precio_venta > Decimal('0'):
+                    nuevo_margen = ((producto_maestro.precio_venta - precio_unitario) / precio_unitario) * Decimal('100.00')
+                    producto_maestro.margen_ganancia = nuevo_margen.quantize(Decimal('0.01'))
+                
                 producto_maestro.save()
                 
-            
                 Producto.objects.create(
                     nombre_producto=item['nombre'],
                     descripcion_producto=producto_maestro.descripcion_producto,
-                    codigo_barras=producto_maestro.codigo_barras + '_' + item['lote'], 
+                    codigo_barras=item['lote'], 
                     registrosanitario=producto_maestro.registrosanitario,
                     precio_compra=precio_unitario,
-                    precio_venta=precio_venta_maestro,
+                    precio_venta=producto_maestro.precio_venta,
                     margen_ganancia=producto_maestro.margen_ganancia,
                     stock_actual=item['cantidad'] if estado == 'recibida' else 0, 
                     stock_minimo=producto_maestro.stock_minimo,
                     stock_maximo=producto_maestro.stock_maximo,
-                    fecha_vencimiento=item['fecha_vencimiento'],
+                    fecha_vencimiento=fecha_vencimiento_lote,
                     categoria_idcategoria=producto_maestro.categoria_idcategoria,
-                    
                     proveedor_idproveedor_id=proveedor.id, 
                     activo=1,
-                    
                 )
 
-                
                 Compra_detalle.objects.create(
                     compra_idcompra=compra,
                     producto_idproducto=producto_maestro, 
                     cantidad=item['cantidad'],
-                    precio_compra_unitario=item['precio'],
-                    subtotal_linea_compra=item['subtotal'],
+                    precio_compra_unitario=Decimal(str(item['precio'])),
+                    subtotal_linea_compra=Decimal(str(item['subtotal'])),
                     lote=item['lote'],
-                    fecha_vencimiento=item['fecha_vencimiento']
+                    fecha_vencimiento=fecha_vencimiento_lote
                 )
 
-            
                 if estado == 'recibida':
-                    
                     producto_maestro.stock_actual += item['cantidad']
                     producto_maestro.save()
-                    
                     
             request.session.pop(f'carrito_compra_{idproveedor}', None)
             messages.success(request, f"Compra #{compra.numero_factura_compra} registrada como '{estado.upper()}'.")
             return redirect("detalle_compra_proveedor", compra_id=compra.id)
 
-
-        
         return redirect("crear_compra_proveedor", idproveedor=idproveedor)
         
-        
-    
-    
     return render(request, "proveedor/crear_compra.html", {
         "proveedor": proveedor,
         "productos": productos_maestros, 
+        "categorias": categorias,
         "carrito": carrito,
         "subtotal_compra": subtotal_compra,
         "iva_compra": iva_compra,
@@ -1201,12 +1291,14 @@ def compra_quitar_producto(request, idproveedor, temp_id):
 
     return redirect("crear_compra_proveedor", idproveedor=idproveedor)
 
+
 @login_required
 def compra_limpiar_carrito(request, idproveedor):
     request.session.pop(f'carrito_compra_{idproveedor}', None)
     request.session.modified = True
     messages.info(request, "Lista de compra limpiada.")
     return redirect("crear_compra_proveedor", idproveedor=idproveedor)
+
 
 @transaction.atomic
 def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
@@ -1239,20 +1331,16 @@ def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
     nombre_producto_en_carrito = ""
     precio_venta = Decimal('0.00')
 
-    
     if tipo == "nuevo":
-        
         nombre_producto = request.POST.get('nombre_producto').strip() 
         categoria_id = request.POST.get('categoria')
         
-        precio_venta_post = request.POST.get('precio_venta')
-        precio_venta = Decimal(precio_venta_post or "0")
+        precio_venta = Decimal('0.00')
         categoria_id_en_carrito = categoria_id
 
-        if not nombre_producto or not categoria_id or precio_venta <= Decimal('0'):
-            messages.error(request, "Faltan datos obligatorios del producto nuevo (Nombre, Categoría, Precio Venta).")
+        if not nombre_producto or not categoria_id:
+            messages.error(request, "Faltan datos obligatorios del producto nuevo (Nombre, Categoría).")
             return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
-        
         
         if Producto.objects.filter(
             nombre_producto__iexact=nombre_producto,
@@ -1265,32 +1353,25 @@ def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
         producto_id_en_carrito = 0
         nombre_producto_en_carrito = nombre_producto
     
-    
     elif tipo == "existente":
         producto_id_post = request.POST.get("producto_id")
-        
-        
         producto_existente_obj = get_object_or_404(Producto, id=producto_id_post) 
-        
         
         if producto_existente_obj.codigo_barras != 'SIN_LOTE_CATALOGO':
             messages.error(request, "Error: El ID seleccionado no corresponde a un producto maestro (catálogo).")
             return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
       
-        
         producto_id_en_carrito = producto_existente_obj.id
         nombre_producto_en_carrito = producto_existente_obj.nombre_producto
         categoria_id_en_carrito = producto_existente_obj.categoria_idcategoria.id
         descripcion_producto = producto_existente_obj.descripcion_producto 
         
-        precio_venta_post = request.POST.get('precio_venta')
-        precio_venta = Decimal(precio_venta_post or str(producto_existente_obj.precio_venta))
+        precio_venta = producto_existente_obj.precio_venta
         
     else:
         messages.error(request, "Tipo de producto no válido.")
         return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
 
-    
     carrito_key = f'carrito_compra_{proveedor.id}'
     carrito = request.session.get(carrito_key, [])
     subtotal_linea = cantidad * precio_compra_unitario
@@ -1306,8 +1387,7 @@ def agregar_al_carrito_compra(request, proveedor_id, productos, categorias):
         'fecha_vencimiento': fecha_vencimiento,
         'lote': lote_detalle,
         'categoria_id': categoria_id_en_carrito if categoria_id_en_carrito else None,
-        'precio_venta_sugerido': float(precio_venta), 
-        
+        'precio_venta_sugerido': float(precio_venta),
         'datos_nuevo_maestro': {
             'registro_sanitario': request.POST.get('registrosaniario', ''),
             'stock_minimo': int(request.POST.get('stock_minimo') or 1),
@@ -1339,7 +1419,6 @@ def procesar_compra_final(request, proveedor):
     numero_factura = request.POST.get("numero_factura", "")
 
     try:
-        
         subtotal_compra = sum(Decimal(str(item['subtotal'])) for item in carrito)
         iva_compra = subtotal_compra * Decimal("0.19") 
         total_compra = subtotal_compra + iva_compra
@@ -1361,7 +1440,7 @@ def procesar_compra_final(request, proveedor):
             
             precio_unitario = Decimal(str(item['precio']))
             cantidad = int(item['cantidad'])
-            fecha_vencimiento_detalle = item['fecha_vencimiento']
+            fecha_vencimiento_detalle = item.get('fecha_vencimiento')
             lote_detalle = item['lote']
             subtotal_linea = Decimal(str(item['subtotal']))
             stock_anterior = 0 
@@ -1369,21 +1448,17 @@ def procesar_compra_final(request, proveedor):
             precio_venta_float_sugerido = item.get('precio_venta_sugerido')
             precio_venta_sugerido = Decimal(str(precio_venta_float_sugerido)) if precio_venta_float_sugerido else Decimal('0.00')
 
-            
             if item['tipo'] == "nuevo":
-                
                 datos_maestro = item.get('datos_nuevo_maestro', {})
-                
-                fecha_vencimiento_final = fecha_vencimiento_detalle or date(2099, 12, 31) 
+                fecha_vencimiento_final = fecha_vencimiento_detalle or date(2099, 12, 31)
                 categoria_id_from_carrito = item.get('categoria_id')
                 
                 if not categoria_id_from_carrito:
                     raise Exception("ID de categoría no encontrado en el carrito para producto nuevo.")
                 
-                
                 categoria_obj = get_object_or_404(Categoria, id=categoria_id_from_carrito)
 
-                precio_venta_maestro = precio_venta_sugerido 
+                precio_venta_maestro = Decimal('0.00')
 
                 descripcion_producto = datos_maestro.get('descripcion_producto', '')
                 registrosanitario = datos_maestro.get('registro_sanitario', '')
@@ -1391,11 +1466,6 @@ def procesar_compra_final(request, proveedor):
                 stock_maximo_val = datos_maestro.get('stock_maximo') or 999999 
 
                 margen_calculado = Decimal('0.00')
-                if precio_unitario > Decimal('0') and precio_venta_maestro > Decimal('0'):
-                    nuevo_margen_calc = ((precio_venta_maestro - precio_unitario) / precio_unitario) * Decimal('100.00')
-                    margen_calculado = nuevo_margen_calc.quantize(Decimal('0.01'))
-                
-                
                 
                 try:
                     producto_maestro, creado_maestro = Producto.objects.get_or_create(
@@ -1406,8 +1476,8 @@ def procesar_compra_final(request, proveedor):
                         defaults={
                             'registrosanitario': registrosanitario,
                             'precio_compra': precio_unitario,
-                            'precio_venta': precio_venta_maestro, 
-                            'margen_ganancia': margen_calculado,  
+                            'precio_venta': precio_venta_maestro,
+                            'margen_ganancia': margen_calculado,
                             'stock_actual': 0, 
                             'stock_minimo': stock_minimo_val,
                             'stock_maximo': stock_maximo_val,
@@ -1417,17 +1487,15 @@ def procesar_compra_final(request, proveedor):
                         }
                     )
                 except IntegrityError as e:
-                    
                     transaction.set_rollback(True) 
                     messages.error(request, f"Error de unicidad del catálogo: Ya existe el producto '{item['nombre']}' con la misma descripción.")
                     return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
                 
-                
-                
                 if not creado_maestro:
                     producto_maestro.precio_compra = precio_unitario
-                    producto_maestro.precio_venta = precio_venta_maestro 
-                    producto_maestro.margen_ganancia = margen_calculado   
+                    if producto_maestro.precio_venta > Decimal('0'):
+                        nuevo_margen = ((producto_maestro.precio_venta - precio_unitario) / precio_unitario) * Decimal('100.00')
+                        producto_maestro.margen_ganancia = nuevo_margen.quantize(Decimal('0.01'))
                     producto_maestro.save()
 
                 producto = Producto.objects.create(
@@ -1436,7 +1504,7 @@ def procesar_compra_final(request, proveedor):
                     codigo_barras=lote_detalle, 
                     registrosanitario=registrosanitario, 
                     precio_compra=precio_unitario,
-                    precio_venta=producto_maestro.precio_venta, 
+                    precio_venta=producto_maestro.precio_venta,
                     margen_ganancia=producto_maestro.margen_ganancia, 
                     stock_actual=0, 
                     stock_minimo=stock_minimo_val,
@@ -1448,31 +1516,22 @@ def procesar_compra_final(request, proveedor):
                 )
                 stock_anterior = 0
             
-            
-            else: # tipo == "existente"
-                
+            else:
                 producto_id_from_carrito = item.get('producto_id')
                 producto_base = Producto.objects.get(id=producto_id_from_carrito)
                 producto_maestro = producto_base 
                 
                 fecha_vencimiento_final = fecha_vencimiento_detalle or producto_base.fecha_vencimiento or date(2099, 12, 31)
 
-      
-                precio_venta_maestro = precio_venta_sugerido 
-
-                margen_calculado = Decimal('0.00')
-                if precio_unitario > Decimal('0') and precio_venta_maestro > Decimal('0'):
-                    nuevo_margen_calc = ((precio_venta_maestro - precio_unitario) / precio_unitario) * Decimal('100.00')
-                    margen_calculado = nuevo_margen_calc.quantize(Decimal('0.01'))
-                
-
                 producto_maestro.precio_compra = precio_unitario
-                producto_maestro.precio_venta = precio_venta_maestro 
-                producto_maestro.margen_ganancia = margen_calculado   
+                
+                if producto_maestro.precio_venta > Decimal('0'):
+                    nuevo_margen = ((producto_maestro.precio_venta - precio_unitario) / precio_unitario) * Decimal('100.00')
+                    producto_maestro.margen_ganancia = nuevo_margen.quantize(Decimal('0.01'))
+                
                 producto_maestro.save()
                 
                 try:
-                    
                     producto = Producto.objects.get(
                         nombre_producto=producto_base.nombre_producto,
                         codigo_barras=lote_detalle, 
@@ -1482,24 +1541,19 @@ def procesar_compra_final(request, proveedor):
                     
                     producto.precio_venta = producto_maestro.precio_venta     
                     producto.margen_ganancia = producto_maestro.margen_ganancia 
-         
                     
                 except Producto.DoesNotExist:
-           
                     producto = Producto.objects.create(
                         nombre_producto=producto_base.nombre_producto,
                         descripcion_producto=producto_base.descripcion_producto,
                         categoria_idcategoria=producto_base.categoria_idcategoria,
                         proveedor_idproveedor=proveedor, 
-                        
                         codigo_barras=lote_detalle, 
                         fecha_vencimiento=fecha_vencimiento_final,
-                        precio_venta=producto_maestro.precio_venta,      
+                        precio_venta=producto_maestro.precio_venta,
                         margen_ganancia=producto_maestro.margen_ganancia, 
-                        
                         stock_minimo=producto_base.stock_minimo, 
                         stock_maximo=producto_base.stock_maximo,
-                        
                         precio_compra=precio_unitario,
                         stock_actual=0, 
                         registrosanitario=producto_base.registrosanitario,
@@ -1507,13 +1561,9 @@ def procesar_compra_final(request, proveedor):
                     )
                     stock_anterior = 0 
 
-
             if not producto or not producto.pk:
-                
                 raise Exception(f"El objeto Producto (Lote) es nulo para '{item['nombre']}'.")
                 
-            
-            
             Compra_detalle.objects.create(
                 compra_idcompra=compra,
                 producto_idproducto=producto, 
@@ -1521,17 +1571,13 @@ def procesar_compra_final(request, proveedor):
                 precio_compra_unitario=precio_unitario,
                 subtotal_linea_compra=subtotal_linea,
                 lote=lote_detalle,
-                fecha_vencimiento=fecha_vencimiento_detalle 
+                fecha_vencimiento=fecha_vencimiento_detalle or date(2099, 12, 31)
             )
             
-            
             if estado == 'recibida':
-                
                 producto.stock_actual += cantidad
                 producto.precio_compra = precio_unitario
-                
                 producto.save() 
-                
                 
                 Movimiento_inventario.objects.create(
                     producto_idproducto=producto, 
@@ -1548,8 +1594,6 @@ def procesar_compra_final(request, proveedor):
                     usuarios_id_usuario=request.user 
                 )
 
-
-        
         request.session[carrito_key] = []
         request.session.modified = True
         
@@ -1557,121 +1601,10 @@ def procesar_compra_final(request, proveedor):
         return redirect("listar_compras") 
 
     except Exception as e:
-        
         transaction.set_rollback(True) 
         messages.error(request, f'Error CRÍTICO al procesar la compra. Detalles: {str(e)}')
-        
         return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
 
-
-@login_required
-def crear_compra_proveedor(request, idproveedor):
-    proveedor = get_object_or_404(Proveedor, id=idproveedor)
-    categorias = Categoria.objects.filter(activo=1)
-
-   
-    productos_maestros = Producto.objects.filter(
-        activo=1, 
-        codigo_barras='SIN_LOTE_CATALOGO' 
-    ).order_by('nombre_producto')
-
-    if request.method == "POST":
-        if 'finalizar_compra' in request.POST:
-            return procesar_compra_final(request, proveedor) 
-        elif 'agregar_producto' in request.POST:
-          
-            return agregar_al_carrito_compra(request, proveedor.id, productos_maestros, categorias)
-        
-        messages.error(request, "Acción de formulario no reconocida.")
-        return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
-    
-    
-    stock_consolidado_qs = Producto.objects.filter(
-        activo=1,
-        
-        nombre_producto__in=[p.nombre_producto for p in productos_maestros]
-    ).values(
-        'nombre_producto'
-    ).annotate(
-        stock_total=Sum('stock_actual')
-    )
-    
-    
-    stock_dict = {item['nombre_producto']: item['stock_total'] for item in stock_consolidado_qs}
-
-    
-    for p in productos_maestros:
-        
-        p.stock_actual = stock_dict.get(p.nombre_producto, 0)
-
-  
-    
-    carrito_key = f'carrito_compra_{proveedor.id}'
-    carrito = request.session.get(carrito_key, [])
-    
-    
-    try:
-        
-        subtotal_compra = sum(Decimal(str(item['subtotal'])) for item in carrito)
-        iva_compra = subtotal_compra * Decimal('0.19')
-        total_compra = subtotal_compra + iva_compra
-        
-        subtotal_compra = subtotal_compra.quantize(Decimal('0.01'))
-        iva_compra = iva_compra.quantize(Decimal('0.01'))
-        total_compra = total_compra.quantize(Decimal('0.01'))
-    except:
-        subtotal_compra = Decimal('0.00')
-        iva_compra = Decimal('0.00')
-        total_compra = Decimal('0.00')
-
-
-    return render(request, "proveedor/crear_compra.html", {
-        "proveedor": proveedor,
-        "productos": productos_maestros,  
-        "categorias": categorias,
-        "carrito": carrito,
-        "subtotal_compra": subtotal_compra,
-        "iva_compra": iva_compra,
-        "total_compra": total_compra,
-    })
-
-
-
-
-@login_required
-def compra_quitar_producto(request, idproveedor, temp_id):
-    
-    proveedor = get_object_or_404(Proveedor, id=idproveedor)
-    carrito_key = f'carrito_compra_{proveedor.id}'
-    carrito = request.session.get(carrito_key, [])
-    
-    
-    carrito_nuevo = [item for item in carrito if item['temp_id'] != temp_id]
-    
-    if len(carrito_nuevo) < len(carrito):
-        request.session[carrito_key] = carrito_nuevo
-        request.session.modified = True
-        messages.success(request, 'Producto eliminado de la lista de compra.')
-    else:
-        messages.error(request, 'No se encontró el producto a eliminar.')
-        
-    return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
-
-
-@login_required
-def compra_limpiar_carrito(request, idproveedor):
-    """
-    Limpia todo el carrito de compra.
-    """
-    proveedor = get_object_or_404(Proveedor, id=idproveedor)
-    carrito_key = f'carrito_compra_{proveedor.id}'
-    
-    
-    request.session[carrito_key] = []
-    request.session.modified = True
-    
-    messages.success(request, 'Lista de compra vaciada.')
-    return redirect('crear_compra_proveedor', idproveedor=proveedor.id)
 
 #DETALLE COMPRA PROVEEDOR
 def detalle_compra_proveedor(request, compra_id):
@@ -2697,24 +2630,55 @@ def obtener_precio_producto(request, producto_id):
         return JsonResponse({'error': 'Producto no encontrado'}, status=404)
 
 @admin_required
+@transaction.atomic
 def ventas_editar_estado(request, id):
     """
-    Permite al administrador editar el estado de pago de una venta
-    y la información del cliente.
+    Permite al administrador editar el estado de pago de una venta,
+    agregar abonos adicionales y actualizar información del cliente.
     """
     venta = get_object_or_404(Venta, pk=id)
 
     if request.method == 'POST':
-        form = EditarEstadoVentaForm(request.POST, instance=venta)
+        form = EditarEstadoVentaForm(request.POST, instance=venta, venta=venta)
+        
         if form.is_valid():
-            form.save()
+            nuevo_abono = form.cleaned_data.get('nuevo_abono') or Decimal('0')
+            
+            # Guardar los datos del cliente y observaciones
+            venta = form.save(commit=False)
+            
+            # Procesar nuevo abono si existe
+            if nuevo_abono > 0:
+                # Actualizar abono total
+                venta.abono += nuevo_abono
+                
+                # Recalcular saldo pendiente
+                venta.saldo_pendiente = venta.valor_total - venta.abono
+                
+                # Actualizar estado automáticamente
+                if venta.abono >= venta.valor_total:
+                    venta.estado_pago = 'pagado'
+                    venta.saldo_pendiente = Decimal('0')
+                elif venta.abono > 0:
+                    venta.estado_pago = 'parcial'
+                else:
+                    venta.estado_pago = 'pendiente'
+                
+                messages.success(
+                    request,
+                    f'Abono de ${nuevo_abono:,.0f} registrado exitosamente. '
+                    f'Nuevo estado: {venta.get_estado_pago_display()}'
+                )
+            
+            venta.save()
+            
             messages.success(
                 request,
                 f'Información de la venta {venta.numero_factura} actualizada correctamente'
             )
             return redirect('ventas_detalle', id=venta.id)
     else:
-        form = EditarEstadoVentaForm(instance=venta)
+        form = EditarEstadoVentaForm(instance=venta, venta=venta)
 
     context = {
         'form': form,
@@ -2724,7 +2688,6 @@ def ventas_editar_estado(request, id):
     }
 
     return render(request, 'ventas/editar_estado.html', context)
-
 
 @login_required(login_url='login')
 def ventas_generar_pdf(request, id):

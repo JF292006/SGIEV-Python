@@ -30,8 +30,7 @@
         left: 250px; 
         right: auto; 
         width: calc(100% - 250px); 
-        margin-left: 0; 
-
+        margin-left: 0;
         
         background-color: #f8f9fa; 
         border-top: 1px solid #dee2e6;
@@ -44,7 +43,6 @@
     }
 
     #content {
-
         padding-bottom: 250px !important; 
     }
 
@@ -81,15 +79,14 @@
     .table-hover tbody tr:hover {
         background-color: rgba(61, 134, 46, 0.1);
     }
-    @media (max-width: 768px) {
 
+    @media (max-width: 768px) {
         #sidebar-container {
             position: fixed;
             left: -100%;
             transition: left 0.3s ease;
             z-index: 1000;
             height: 100vh;
-
         }
         
         #sidebar-container.active {
@@ -124,12 +121,9 @@
         padding: 10px 15px;
         border-radius: 5px;
     }
-
-</style>
-
+    </style>
     
     {% block extra_css %}{% endblock %}
-
 </head>
 <body>
 
@@ -225,33 +219,28 @@
                         </div>
                         <div class="form-group col-md-3">
                             <label>Precio unitario (Compra) *</label>
-                            <input type="number" step="0.01" class="form-control" name="valor_unitario" required>
+                            <input type="number" step="0.01" class="form-control" name="valor_unitario" min="0.01" required>
                         </div>
                     </div>
 
                     <div class="form-row">
-                        <div class="form-group col-md-3">
-                            <label for="id_precio_venta">Precio de Venta (PVP) *</label>
-                            <input type="number" step="0.01" class="form-control" id="id_precio_venta" name="precio_venta" required>
-                            <small class="form-text text-muted">Precio al que se venderá al público.</small>
-                        </div>
-                        <div class="form-group col-md-3">
-                             <label>Fecha vencimiento</label>
+                        <div class="form-group col-md-6">
+                            <label>Fecha vencimiento (Opcional)</label>
                             <input type="date" class="form-control" name="fecha_vencimiento" id="fecha_vencimiento">
+                            <small class="form-text text-muted">Si no se ingresa, se asignará fecha por defecto (31/12/2099)</small>
                         </div>
                         
-                        <div class="form-group col-md-6 d-flex align-items-end justify-content-end">
-                            <button type="submit" class="btn btn-info btn-lg mt-0">
+                        <div class="form-group col-md-6 d-flex align-items-end">
+                            <button type="submit" class="btn btn-info btn-block">
                                 <i class="icon ion-md-add-circle mr-2"></i>Añadir a la Lista de Compra
                             </button>
                         </div>
-                        </div>
-
+                    </div>
 
                     <div id="producto_existente_box" class="mb-3">
-                        <label>Seleccionar producto</label>
-                        <select class="form-control" name="producto_id">
-                            <option value="" selected disabled>-- Selecciona un producto de Catálogo --</option>
+                        <label>Seleccionar producto existente *</label>
+                        <select class="form-control" name="producto_id" id="select_producto_existente">
+                            <option value="" selected disabled>-- Selecciona un producto del Catálogo --</option>
                             {% for pr in productos %}
                                 <option value="{{ pr.id }}">
                                     {{ pr.nombre_producto }} 
@@ -266,7 +255,11 @@
                     </div>
 
                     <div id="producto_nuevo_box" style="display:none;" class="mb-3 border p-3 rounded bg-light">
-                        <h5 class="text-info mb-3">Detalles del Nuevo Producto (Maestro)</h5>
+                        <h5 class="text-info mb-3">Detalles del Nuevo Producto</h5>
+                        <div class="alert alert-info">
+                            <i class="icon ion-md-information-circle mr-2"></i>
+                            <strong>Nota:</strong> El precio de venta se puede configurar después desde el módulo de inventario.
+                        </div>
                         <div class="form-row">
                             <div class="form-group col-md-6">
                                 <label for="id_nombre_producto">Nombre Producto *</label>
@@ -284,27 +277,34 @@
                         </div>
                         <div class="form-group">
                             <label for="id_descripcion_producto">Descripción</label>
-                            <textarea class="form-control" id="id_descripcion_producto" name="descripcion_producto" rows="2"></textarea>
+                            <textarea class="form-control" id="id_descripcion_producto" name="descripcion_producto" rows="2" maxlength="255"></textarea>
                         </div>
                         <div class="form-row">
                             <div class="form-group col-md-6">
                                 <label for="id_registrosanitario">Registro Sanitario</label>
-                                <input type="text" class="form-control" id="id_registrosanitario" name="registrosaniario" maxlength="100">
+                                <input type="text" class="form-control" id="id_registrosanitario" name="registrosanitario" maxlength="100">
                             </div>
                             <div class="form-group col-md-3">
                                 <label for="id_stock_minimo">Stock Mínimo</label>
                                 <input type="number" class="form-control" id="id_stock_minimo" name="stock_minimo" value="1" min="1">
                             </div>
+                            <div class="form-group col-md-3">
+                                <label for="id_stock_maximo">Stock Máximo</label>
+                                <input type="number" class="form-control" id="id_stock_maximo" name="stock_maximo" value="1000" min="1">
+                            </div>
                         </div>
                     </div>
                     
                 </form>
+
                 <hr>
+
                 <h5 class="mt-4 mb-3 text-secondary">Productos en la Lista de Compra (Carrito)</h5>
                 
                 {% if not carrito %}
                     <div class="alert alert-warning" role="alert">
-                        No hay productos en la lista de compra. Añade uno para continuar.
+                        <i class="icon ion-md-warning mr-2"></i>
+                        No hay productos en la lista de compra. Añade al menos uno para continuar.
                     </div>
                 {% else %}
                     <div class="table-responsive mb-4">
@@ -313,9 +313,10 @@
                                 <tr>
                                     <th>#</th>
                                     <th>Producto</th>
-                                    <th class="text-right">Precio Unitario</th>
+                                    <th>Lote</th>
+                                    <th class="text-right">Precio Compra</th>
                                     <th class="text-center">Cantidad</th>
-                                    <th class="text-right">Subtotal Línea</th>
+                                    <th class="text-right">Subtotal</th>
                                     <th class="text-center">Vencimiento</th>
                                     <th class="text-center">Acciones</th>
                                 </tr>
@@ -324,26 +325,25 @@
                                 {% for item in carrito %}
                                 <tr>
                                     <td>{{ forloop.counter }}</td>
+                                    <td>{{ item.nombre }}</td>
                                     <td>
-                                        {{ item.nombre }} {% if item.lote %}
-                                            <span class="badge badge-secondary ml-2">Lote: {{ item.lote }}</span>
-                                        {% endif %}
-                                        {% if item.datos_nuevo_maestro.precio_venta %}
-                                            <small class="d-block text-muted">PVP: ${{ item.datos_nuevo_maestro.precio_venta|floatformat:2 }}</small>
-                                        {% endif %}
+                                        <span class="badge badge-secondary">{{ item.lote }}</span>
                                     </td>
                                     <td class="text-right">$ {{ item.precio|floatformat:2 }}</td>
                                     <td class="text-center">{{ item.cantidad }}</td>
-                                    <td class="text-right">$ {{ item.subtotal|floatformat:2 }}</td>
+                                    <td class="text-right"><strong>$ {{ item.subtotal|floatformat:2 }}</strong></td>
                                     <td class="text-center">
                                         {% if item.fecha_vencimiento %}
                                             {{ item.fecha_vencimiento }}
                                         {% else %}
-                                            N/A
+                                            <span class="text-muted">Por defecto</span>
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        <a href="{% url 'compra_quitar_producto' proveedor.id item.temp_id %}" class="btn btn-sm btn-danger" title="Quitar producto">
+                                        <a href="{% url 'compra_quitar_producto' proveedor.id item.temp_id %}" 
+                                           class="btn btn-sm btn-danger" 
+                                           title="Quitar producto"
+                                           onclick="return confirm('¿Estás seguro de quitar este producto?');">
                                             <i class="icon ion-md-trash"></i>
                                         </a>
                                     </td>
@@ -352,40 +352,45 @@
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colspan="4" class="text-right">SUBTOTAL COMPRA:</td>
+                                    <td colspan="5" class="text-right">SUBTOTAL COMPRA:</td>
                                     <td class="text-right">$ {{ subtotal_compra|floatformat:2 }}</td>
                                     <td colspan="2"></td>
                                 </tr>
                                 <tr>
-                                    <td colspan="4" class="text-right">IVA (19%):</td>
+                                    <td colspan="5" class="text-right">IVA (19%):</td>
                                     <td class="text-right">$ {{ iva_compra|floatformat:2 }}</td>
                                     <td colspan="2"></td>
                                 </tr>
-                                <tr>
-                                    <td colspan="4" class="text-right text-success">TOTAL COMPRA:</td>
-                                    <td class="text-right text-success">$ {{ total_compra|floatformat:2 }}</td>
+                                <tr class="table-success">
+                                    <td colspan="5" class="text-right"><strong>TOTAL COMPRA:</strong></td>
+                                    <td class="text-right"><strong>$ {{ total_compra|floatformat:2 }}</strong></td>
                                     <td colspan="2"></td>
                                 </tr>
                             </tfoot>
                         </table>
                     </div>
 
-                    <h5 class="mt-4 mb-3 text-secondary"> Detalles Finales de la Compra</h5>
+                    <h5 class="mt-4 mb-3 text-secondary">Detalles Finales de la Compra</h5>
                     <form id="form_finalizar_compra_details" method="POST" novalidate>
                         {% csrf_token %}
                         <input type="hidden" name="finalizar_compra" value="1">
                         
                         <div class="form-row">
                             <div class="form-group col-md-4">
-                                <label>Estado de la compra</label>
-                                <select class="form-control" name="estado_compra">
-                                    <option value="pendiente" selected>Pendiente</option>
-                                    <option value="recibida">Recibida</option>
+                                <label>Número de Factura (Opcional)</label>
+                                <input type="text" class="form-control" name="numero_factura" placeholder="Se generará automáticamente si se deja vacío">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Estado de la compra *</label>
+                                <select class="form-control" name="estado_compra" required>
+                                    <option value="pendiente" selected>Pendiente (sin afectar stock)</option>
+                                    <option value="recibida">Recibida (actualiza stock)</option>
                                 </select>
+                                <small class="form-text text-muted">Si seleccionas "Recibida", el stock se actualizará inmediatamente</small>
                             </div>
                             <div class="form-group col-md-4">
                                 <label>Observaciones</label>
-                                <textarea name="observaciones" class="form-control" rows="1"></textarea>
+                                <textarea name="observaciones" class="form-control" rows="1" placeholder="Notas adicionales..."></textarea>
                             </div>
                         </div>
                     </form>
@@ -397,7 +402,11 @@
 
 {% if carrito %}
 <div class="fixed-actions-bar">
-    <a href="{% url 'compra_limpiar_carrito' proveedor.id %}" class="btn btn-outline-warning mr-3"><i class="icon ion-md-refresh mr-1"></i>Limpiar Carrito</a>
+    <a href="{% url 'compra_limpiar_carrito' proveedor.id %}" 
+       class="btn btn-outline-warning mr-3"
+       onclick="return confirm('¿Estás seguro de limpiar todo el carrito?');">
+        <i class="icon ion-md-refresh mr-1"></i>Limpiar Carrito
+    </a>
     
     <button type="submit" form="form_finalizar_compra_details" class="btn btn-success btn-lg">
         <i class="icon ion-md-checkmark-circle-outline mr-2"></i>
@@ -420,48 +429,51 @@
         const nuevo = document.getElementById("producto_nuevo_box");
         const existente = document.getElementById("producto_existente_box");
         
-        const campoProductoExistente = existente ? existente.querySelector('select') : null;
-
+        const campoProductoExistente = document.getElementById('select_producto_existente');
         const camposSoloNuevo = [
             document.getElementById("id_nombre_producto"),
             document.getElementById("id_categoria"),
-        ].filter(el => el != null); 
-        
+        ];
         
         const toggleBoxes = () => {
-             if (tipo.value === "nuevo") {
-                 nuevo.style.display = "block";
-                 existente.style.display = "none";
-                 
-                 camposSoloNuevo.forEach(field => field.setAttribute('required', 'required'));
-                 if (campoProductoExistente) {
-                     campoProductoExistente.removeAttribute('required');
-                 }
-
-             } else {
-                 nuevo.style.display = "none";
-                 existente.style.display = "block";
-                 
-                 camposSoloNuevo.forEach(field => field.removeAttribute('required'));
-                 if (campoProductoExistente) {
-                     campoProductoExistente.setAttribute('required', 'required');
-                 }
-             }
+            if (tipo.value === "nuevo") {
+                nuevo.style.display = "block";
+                existente.style.display = "none";
+                
+                camposSoloNuevo.forEach(field => {
+                    if (field) field.setAttribute('required', 'required');
+                });
+                if (campoProductoExistente) {
+                    campoProductoExistente.removeAttribute('required');
+                    campoProductoExistente.value = '';
+                }
+            } else {
+                nuevo.style.display = "none";
+                existente.style.display = "block";
+                
+                camposSoloNuevo.forEach(field => {
+                    if (field) {
+                        field.removeAttribute('required');
+                        field.value = '';
+                    }
+                });
+                if (campoProductoExistente) {
+                    campoProductoExistente.setAttribute('required', 'required');
+                }
+            }
         };
 
         toggleBoxes();
-
         tipo.addEventListener("change", toggleBoxes);
     });
 </script>
+
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         var inputFechaVencimiento = document.getElementById('fecha_vencimiento');
         
         if (inputFechaVencimiento) {
-            
             var fechaMinima = new Date();
-     
             fechaMinima.setFullYear(fechaMinima.getFullYear() + 1);
 
             var year = fechaMinima.getFullYear();
@@ -469,15 +481,9 @@
             var day = ('0' + fechaMinima.getDate()).slice(-2);
             
             var fechaFormateada = year + '-' + month + '-' + day;
-            
-   
             inputFechaVencimiento.min = fechaFormateada;
         }
     });
-
-    function toggleSidebar() {
-        document.getElementById('sidebar-container').classList.toggle('active');
-    }
 </script>
 </body>
 </html>

@@ -29,7 +29,7 @@
                     </h5>
                 </div>
                 <div class="card-body">
-                    <form method="post" novalidate>
+                    <form method="post" novalidate id="formUsuario">
                         {% csrf_token %}
                         
                         <!-- Información Personal -->
@@ -38,9 +38,11 @@
                             <div class="col-md-6 form-group">
                                 <label for="{{ form.num_identificacion.id_for_label }}">{{ form.num_identificacion.label }} *</label>
                                 {{ form.num_identificacion }}
+                                <small class="form-text text-muted">Máximo 11 dígitos</small>
                                 {% if form.num_identificacion.errors %}
                                     <div class="text-danger small">{{ form.num_identificacion.errors }}</div>
                                 {% endif %}
+                                <div id="identificacion-feedback" class="small mt-1"></div>
                             </div>
                             <div class="col-md-6 form-group">
                                 <label for="{{ form.tipo_usu.id_for_label }}">{{ form.tipo_usu.label }} *</label>
@@ -98,9 +100,11 @@
                             <div class="col-md-6 form-group">
                                 <label for="{{ form.telefono.id_for_label }}">{{ form.telefono.label }} *</label>
                                 {{ form.telefono }}
+                                <small class="form-text text-muted">Exactamente 10 dígitos</small>
                                 {% if form.telefono.errors %}
                                     <div class="text-danger small">{{ form.telefono.errors }}</div>
                                 {% endif %}
+                                <div id="telefono-feedback" class="small mt-1"></div>
                             </div>
                         </div>
 
@@ -125,9 +129,11 @@
                             <div class="col-md-6 form-group">
                                 <label for="{{ form.fecha_nacimiento.id_for_label }}">{{ form.fecha_nacimiento.label }} *</label>
                                 {{ form.fecha_nacimiento }}
+                                <small class="form-text text-muted">Debe ser mayor de 18 años</small>
                                 {% if form.fecha_nacimiento.errors %}
                                     <div class="text-danger small">{{ form.fecha_nacimiento.errors }}</div>
                                 {% endif %}
+                                <div id="edad-feedback" class="small mt-1"></div>
                             </div>
                         </div>
 
@@ -143,19 +149,31 @@
                         <h6 class="border-bottom pb-2 mb-3 mt-4">Seguridad</h6>
                         <div class="row">
                             <div class="col-md-6 form-group">
-                                <label for="{{ form.password.id_for_label }}">{{ form.password.label }} *</label>
+                                <label for="password_input">{{ form.password.label }} *</label>
                                 {{ form.password }}
+                                <small class="form-text text-muted">Mínimo 8 caracteres, 1 mayúscula y 3 números</small>
                                 {% if form.password.errors %}
                                     <div class="text-danger small">{{ form.password.errors }}</div>
                                 {% endif %}
-                                <small class="form-text text-muted">{{ form.password.help_text }}</small>
+                                <div id="password-feedback" class="mt-2">
+                                    <div class="password-requirement">
+                                        <span id="req-length" class="text-muted">✗ Mínimo 8 caracteres</span>
+                                    </div>
+                                    <div class="password-requirement">
+                                        <span id="req-uppercase" class="text-muted">✗ Al menos 1 mayúscula</span>
+                                    </div>
+                                    <div class="password-requirement">
+                                        <span id="req-numbers" class="text-muted">✗ Al menos 3 números</span>
+                                    </div>
+                                </div>
                             </div>
                             <div class="col-md-6 form-group">
-                                <label for="{{ form.password_confirm.id_for_label }}">{{ form.password_confirm.label }} *</label>
+                                <label for="password_confirm_input">{{ form.password_confirm.label }} *</label>
                                 {{ form.password_confirm }}
                                 {% if form.password_confirm.errors %}
                                     <div class="text-danger small">{{ form.password_confirm.errors }}</div>
                                 {% endif %}
+                                <div id="password-match-feedback" class="small mt-1"></div>
                             </div>
                         </div>
 
@@ -168,7 +186,7 @@
 
                         <!-- Botones -->
                         <div class="form-group mt-4">
-                            <button type="submit" class="btn btn-primary">
+                            <button type="submit" class="btn btn-primary" id="btnSubmit">
                                 <i class="icon ion-md-checkmark"></i> Guardar Usuario
                             </button>
                             <a href="{% url 'usuarios_listar' %}" class="btn btn-secondary">
@@ -181,4 +199,267 @@
         </div>
     </div>
 </div>
+
+<style>
+    .password-requirement {
+        font-size: 0.875rem;
+        margin-bottom: 3px;
+    }
+    .text-success {
+        color: #28a745 !important;
+    }
+    .text-danger {
+        color: #dc3545 !important;
+    }
+    .border-success {
+        border-color: #28a745 !important;
+    }
+    .border-danger {
+        border-color: #dc3545 !important;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Validación de número de identificación
+    const inputIdentificacion = document.querySelector('input[name="num_identificacion"]');
+    const feedbackIdentificacion = document.getElementById('identificacion-feedback');
+    
+    if (inputIdentificacion) {
+        inputIdentificacion.addEventListener('input', function(e) {
+            // Solo permitir números
+            this.value = this.value.replace(/[^0-9]/g, '');
+            
+            // Limitar a 11 caracteres
+            if (this.value.length > 11) {
+                this.value = this.value.slice(0, 11);
+            }
+            
+            // Feedback visual
+            if (this.value.length === 0) {
+                feedbackIdentificacion.textContent = '';
+                this.classList.remove('border-success', 'border-danger');
+            } else if (this.value.length > 11) {
+                feedbackIdentificacion.textContent = '✗ Máximo 11 dígitos';
+                feedbackIdentificacion.className = 'small mt-1 text-danger';
+                this.classList.add('border-danger');
+                this.classList.remove('border-success');
+            } else {
+                feedbackIdentificacion.textContent = `✓ ${this.value.length}/11 dígitos`;
+                feedbackIdentificacion.className = 'small mt-1 text-success';
+                this.classList.add('border-success');
+                this.classList.remove('border-danger');
+            }
+        });
+    }
+    
+    // Validación de teléfono
+    const inputTelefono = document.querySelector('input[name="telefono"]');
+    const feedbackTelefono = document.getElementById('telefono-feedback');
+    
+    if (inputTelefono) {
+        inputTelefono.addEventListener('input', function(e) {
+            // Solo permitir números
+            this.value = this.value.replace(/[^0-9]/g, '');
+            
+            // Limitar a 10 caracteres
+            if (this.value.length > 10) {
+                this.value = this.value.slice(0, 10);
+            }
+            
+            // Feedback visual
+            if (this.value.length === 0) {
+                feedbackTelefono.textContent = '';
+                this.classList.remove('border-success', 'border-danger');
+            } else if (this.value.length < 10) {
+                feedbackTelefono.textContent = `✗ Faltan ${10 - this.value.length} dígitos`;
+                feedbackTelefono.className = 'small mt-1 text-danger';
+                this.classList.add('border-danger');
+                this.classList.remove('border-success');
+            } else if (this.value.length === 10) {
+                feedbackTelefono.textContent = '✓ Teléfono válido';
+                feedbackTelefono.className = 'small mt-1 text-success';
+                this.classList.add('border-success');
+                this.classList.remove('border-danger');
+            }
+        });
+    }
+    
+    // Validación de fecha de nacimiento (mayor de 18 años)
+    const inputFechaNac = document.getElementById('fecha_nacimiento');
+    const feedbackEdad = document.getElementById('edad-feedback');
+    
+    if (inputFechaNac) {
+        // Establecer fecha máxima (18 años atrás desde hoy)
+        const hoy = new Date();
+        const hace18 = new Date(hoy.getFullYear() - 18, hoy.getMonth(), hoy.getDate());
+        const fechaMaxima = hace18.toISOString().split('T')[0];
+        inputFechaNac.max = fechaMaxima;
+        
+        inputFechaNac.addEventListener('change', function() {
+            const fechaNac = new Date(this.value);
+            const edad = Math.floor((hoy - fechaNac) / (365.25 * 24 * 60 * 60 * 1000));
+            
+            if (this.value === '') {
+                feedbackEdad.textContent = '';
+                this.classList.remove('border-success', 'border-danger');
+            } else if (edad < 18) {
+                feedbackEdad.textContent = `✗ Debe ser mayor de 18 años (Edad: ${edad} años)`;
+                feedbackEdad.className = 'small mt-1 text-danger';
+                this.classList.add('border-danger');
+                this.classList.remove('border-success');
+            } else if (edad > 100) {
+                feedbackEdad.textContent = '✗ Fecha no válida';
+                feedbackEdad.className = 'small mt-1 text-danger';
+                this.classList.add('border-danger');
+                this.classList.remove('border-success');
+            } else {
+                feedbackEdad.textContent = `✓ Edad válida: ${edad} años`;
+                feedbackEdad.className = 'small mt-1 text-success';
+                this.classList.add('border-success');
+                this.classList.remove('border-danger');
+            }
+        });
+    }
+    
+    // Validación de contraseña en tiempo real
+    const inputPassword = document.getElementById('password_input');
+    const reqLength = document.getElementById('req-length');
+    const reqUppercase = document.getElementById('req-uppercase');
+    const reqNumbers = document.getElementById('req-numbers');
+    
+    if (inputPassword) {
+        inputPassword.addEventListener('input', function() {
+            const password = this.value;
+            let validCount = 0;
+            
+            // Validar longitud
+            if (password.length >= 8) {
+                reqLength.textContent = '✓ Mínimo 8 caracteres';
+                reqLength.className = 'text-success font-weight-bold';
+                validCount++;
+            } else {
+                reqLength.textContent = `✗ Mínimo 8 caracteres (${password.length}/8)`;
+                reqLength.className = 'text-danger';
+            }
+            
+            // Validar mayúsculas
+            const mayusculas = (password.match(/[A-Z]/g) || []).length;
+            if (mayusculas >= 1) {
+                reqUppercase.textContent = '✓ Al menos 1 mayúscula';
+                reqUppercase.className = 'text-success font-weight-bold';
+                validCount++;
+            } else {
+                reqUppercase.textContent = '✗ Al menos 1 mayúscula';
+                reqUppercase.className = 'text-danger';
+            }
+            
+            // Validar números
+            const numeros = (password.match(/[0-9]/g) || []).length;
+            if (numeros >= 3) {
+                reqNumbers.textContent = '✓ Al menos 3 números';
+                reqNumbers.className = 'text-success font-weight-bold';
+                validCount++;
+            } else {
+                reqNumbers.textContent = `✗ Al menos 3 números (${numeros}/3)`;
+                reqNumbers.className = 'text-danger';
+            }
+            
+            // Cambiar borde del input
+            if (validCount === 3) {
+                this.classList.add('border-success');
+                this.classList.remove('border-danger');
+            } else if (password.length > 0) {
+                this.classList.add('border-danger');
+                this.classList.remove('border-success');
+            } else {
+                this.classList.remove('border-success', 'border-danger');
+            }
+        });
+    }
+    
+    // Validación de confirmación de contraseña
+    const inputPasswordConfirm = document.getElementById('password_confirm_input');
+    const feedbackMatch = document.getElementById('password-match-feedback');
+    
+    if (inputPassword && inputPasswordConfirm) {
+        function validarCoincidencia() {
+            const password = inputPassword.value;
+            const passwordConfirm = inputPasswordConfirm.value;
+            
+            if (passwordConfirm === '') {
+                feedbackMatch.textContent = '';
+                inputPasswordConfirm.classList.remove('border-success', 'border-danger');
+            } else if (password === passwordConfirm) {
+                feedbackMatch.textContent = '✓ Las contraseñas coinciden';
+                feedbackMatch.className = 'small mt-1 text-success';
+                inputPasswordConfirm.classList.add('border-success');
+                inputPasswordConfirm.classList.remove('border-danger');
+            } else {
+                feedbackMatch.textContent = '✗ Las contraseñas no coinciden';
+                feedbackMatch.className = 'small mt-1 text-danger';
+                inputPasswordConfirm.classList.add('border-danger');
+                inputPasswordConfirm.classList.remove('border-success');
+            }
+        }
+        
+        inputPassword.addEventListener('input', validarCoincidencia);
+        inputPasswordConfirm.addEventListener('input', validarCoincidencia);
+    }
+    
+    // Validación antes de enviar
+    const form = document.getElementById('formUsuario');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            let errores = [];
+            
+            // Validar identificación
+            if (inputIdentificacion && (inputIdentificacion.value.length === 0 || inputIdentificacion.value.length > 11)) {
+                errores.push('Número de identificación inválido');
+            }
+            
+            // Validar teléfono
+            if (inputTelefono && inputTelefono.value.length !== 10) {
+                errores.push('El teléfono debe tener exactamente 10 dígitos');
+            }
+            
+            // Validar edad
+            if (inputFechaNac && inputFechaNac.value) {
+                const fechaNac = new Date(inputFechaNac.value);
+                const hoy = new Date();
+                const edad = Math.floor((hoy - fechaNac) / (365.25 * 24 * 60 * 60 * 1000));
+                if (edad < 18) {
+                    errores.push('El usuario debe ser mayor de 18 años');
+                }
+            }
+            
+            // Validar contraseña
+            const password = inputPassword.value;
+            const mayusculas = (password.match(/[A-Z]/g) || []).length;
+            const numeros = (password.match(/[0-9]/g) || []).length;
+            
+            if (password.length < 8) {
+                errores.push('La contraseña debe tener al menos 8 caracteres');
+            }
+            if (mayusculas < 1) {
+                errores.push('La contraseña debe tener al menos 1 mayúscula');
+            }
+            if (numeros < 3) {
+                errores.push('La contraseña debe tener al menos 3 números');
+            }
+            
+            // Validar coincidencia
+            if (inputPassword.value !== inputPasswordConfirm.value) {
+                errores.push('Las contraseñas no coinciden');
+            }
+            
+            if (errores.length > 0) {
+                e.preventDefault();
+                alert('Por favor corrige los siguientes errores:\n\n' + errores.join('\n'));
+                return false;
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

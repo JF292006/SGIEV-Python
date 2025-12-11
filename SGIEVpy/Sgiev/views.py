@@ -1085,6 +1085,8 @@ def _calcular_totales_carrito(carrito):
 def crear_compra_proveedor(request, idproveedor):
     proveedor = get_object_or_404(Proveedor, id=idproveedor)
     categorias = Categoria.objects.filter(activo=1)
+    usuario = request.user
+    es_admin = request.user.tipo_usu == 'administrador'
     
     print(f"--- DEP-COMPRA: Proveedor ID={proveedor.id}, Nombre={proveedor.nombre_proveedor} ---")
 
@@ -1274,6 +1276,8 @@ def crear_compra_proveedor(request, idproveedor):
         "subtotal_compra": subtotal_compra,
         "iva_compra": iva_compra,
         "total_compra": total_compra,
+        "usuario": usuario,
+        "es_admin": es_admin,
     })
 
 
@@ -1614,23 +1618,36 @@ def detalle_compra_proveedor(request, compra_id):
     detalles = Compra_detalle.objects.filter(compra_idcompra=compra)
     
     proveedor = detalles.first().producto_idproducto.proveedor_idproveedor if detalles.exists() else None
-    
+
+    usuario = request.user
+    es_admin = request.user.tipo_usu == 'administrador'
+
+
     context = {
         'compra': compra,
         'detalles': detalles,
         'proveedor': proveedor,
+        'usuario': usuario,
+        'es_admin': es_admin,
     }
     
     return render(request, 'proveedor/detalle_compra_proveedor.html', context)
 
+
 def listar_compras_proveedor(request):
     compras = Compra_proveedor.objects.all().order_by('-fecha_compra')
-    
+    usuario = request.user
+    es_admin = request.user.tipo_usu == 'administrador'
+
+
     context = {
         'compras': compras,
+        'usuario': usuario,
+        'es_admin': es_admin,
     }
     
     return render(request, 'proveedor/listar_compras.html', context)
+
 
 @transaction.atomic
 def recibir_compra_pendiente(request, compra_id):

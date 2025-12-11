@@ -4,28 +4,22 @@ from .models import Usuarios
 
 
 class UsuariosBackend(BaseBackend):
-    """
-    Backend de autenticación personalizado para el modelo Usuarios
-    Autentica usando correo y clave
-    """
-    
     def authenticate(self, request, correo=None, password=None, **kwargs):
+        if correo is None or password is None:
+            return None
+
         try:
-            # Buscar usuario por correo y que esté activo
-            usuario = Usuarios.objects.get(correo=correo, activo=1)
+            user = Usuarios.objects.get(correo=correo, activo=1)
         except Usuarios.DoesNotExist:
             return None
-        
-        # Verificar la contraseña
-        if check_password(password, usuario.clave):
-            return usuario
+
+        # Comparar contra el hash guardado en "clave"
+        if check_password(password, user.clave):
+            return user
         return None
-    
+
     def get_user(self, user_id):
-        """
-        Django llama este método para obtener el usuario desde la sesión
-        """
         try:
-            return Usuarios.objects.get(pk=user_id)
+            return Usuarios.objects.get(pk=user_id, activo=1)
         except Usuarios.DoesNotExist:
             return None

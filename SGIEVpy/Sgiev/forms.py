@@ -659,6 +659,7 @@ class UsuarioForm(forms.ModelForm):
         widget=forms.Select(attrs={'class': 'form-control'})
     )
     
+    # Campos de contraseña (no pertenecen al modelo directamente)
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={
             'class': 'form-control',
@@ -688,7 +689,7 @@ class UsuarioForm(forms.ModelForm):
     def clean_num_identificacion(self):
         """Valida que el número de identificación sea único y válido"""
         num_id = self.cleaned_data.get('num_identificacion')
-        
+
         if not num_id.isdigit():
             raise ValidationError('El número de identificación solo puede contener dígitos')
         
@@ -764,8 +765,23 @@ class UsuarioForm(forms.ModelForm):
         password = cleaned_data.get('password')
         password_confirm = cleaned_data.get('password_confirm')
         
-        if password and password_confirm:
-            if password != password_confirm:
-                raise ValidationError('Las contraseñas no coinciden')
+        if password and password_confirm and password != password_confirm:
+            raise ValidationError('Las contraseñas no coinciden')
         
         return cleaned_data
+
+    def save(self, commit=True):
+        """
+        Guarda el usuario y almacena la contraseña en el campo `clave`
+        usando hash de Django.
+        """
+        user = super().save(commit=False)
+
+        password = self.cleaned_data.get('password')
+        if password:
+            # Guardar hash en el campo correcto del modelo
+            user.clave = make_password(password)
+
+        if commit:
+            user.save()
+        return user

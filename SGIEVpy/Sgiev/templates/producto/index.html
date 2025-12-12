@@ -311,10 +311,9 @@
                         <div class="form-group">
                             <label for="select_producto_general">Producto General:</label>
                             <select class="form-control" id="select_producto_general" required>
-                                <option value="">Seleccione el producto</option>
-                                {% for p in producto %} 
-                                    <option value="{{ p.nombre_producto }} {{ p.descripcion_producto }}">
-                                        {{ p.nombre_producto }} {{ p.descripcion_producto }}
+                              <option value="">Seleccione el producto</option>
+                              {% for p in producto %} 
+                                    <option value="{{ p.id }}"> {{ p.nombre_producto }} {{ p.descripcion_producto }}
                                     </option>
                                 {% endfor %}
                             </select>
@@ -447,34 +446,38 @@
         const hiddenCodigoBarras = document.getElementById('hidden_codigo_barras');
         
         function llenarLotes() {
-            const nombreProductoSeleccionado = productoSelect.value.trim(); 
-            
-            loteSelect.innerHTML = '<option value="">Seleccione un lote</option>';
-            stockInfo.textContent = 'Stock actual del lote: 0';
-            loteSelect.disabled = true;
-            cantidadInput.value = ''; 
-            
-            if (nombreProductoSeleccionado) {
-                const lotesFiltrados = lotesData.filter(lote => 
-                    lote.nombre_producto_completo.trim() === nombreProductoSeleccionado
-                );
-                
-                lotesFiltrados.forEach(lote => {
-                    const option = document.createElement('option');
-                    option.value = lote.id; 
-                    option.textContent = `Lote: ${lote.codigo_barras} (Vence: ${lote.fecha_vencimiento || 'N/A'} | Stock: ${lote.stock_actual})`;
-                    option.dataset.stock = lote.stock_actual; 
-                    option.dataset.codbarras = lote.codigo_barras; 
-                    loteSelect.appendChild(option);
-                });
+    const selectedOption = productoSelect.options[productoSelect.selectedIndex];
+    const nombreProductoSeleccionado = selectedOption.textContent.trim(); 
 
-                if (lotesFiltrados.length > 0) {
-                    loteSelect.disabled = false;
-                }
-            }
-            
-            loteSelect.dispatchEvent(new Event('change'));
+    loteSelect.innerHTML = '<option value="">Seleccione un lote</option>';
+    stockInfo.textContent = 'Stock actual del lote: 0';
+    loteSelect.disabled = true;
+    cantidadInput.value = ''; 
+    hiddenCodigoBarras.value = ''; 
+
+    if (nombreProductoSeleccionado && selectedOption.value !== "") {
+
+        const lotesFiltrados = lotesData.filter(lote => 
+            lote.nombre_producto_completo.trim() === nombreProductoSeleccionado
+        );
+        
+
+        lotesFiltrados.forEach(lote => {
+            const option = document.createElement('option');
+            option.value = lote.id; 
+            option.textContent = `Lote: ${lote.codigo_barras} (Vence: ${lote.fecha_vencimiento || 'N/A'} | Stock: ${lote.stock_actual})`;
+            option.dataset.stock = lote.stock_actual; 
+            option.dataset.codbarras = lote.codigo_barras; 
+            loteSelect.appendChild(option);
+        });
+
+        if (lotesFiltrados.length > 0) {
+            loteSelect.disabled = false;
         }
+    }
+    
+    loteSelect.dispatchEvent(new Event('change'));
+}
 
         function actualizarStockYCampos() {
             const selectedOption = loteSelect.options[loteSelect.selectedIndex];

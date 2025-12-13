@@ -92,7 +92,9 @@
       <div class="logo"><h4 class="text-light font-weight-bold">Romar Natural</h4></div>
       <div class="menu">
         <a href="{% url 'dashboard' %}" class="d-block text-light p-3"><i class="icon ion-md-apps mr-2"></i>Panel</a>
+        {% if es_admin %}
         <a href="{% url 'usuarios_listar' %}" class="d-block text-light p-3"><i class="icon ion-md-contacts mr-2 lead"></i>Usuarios</a>
+        {% endif %}
         <a href="{% url 'listar_proveedores' %}" class="d-block text-light p-3"><i class="icon ion-md-cube mr-2 lead"></i>Proveedores</a>
         <a href="{% url 'ventas_listar'%}" class="d-block text-light p-3"><i class="icon ion-md-cart mr-2 lead"></i>Ventas</a>
         <a href="{% url 'list_categoria' %}" class="d-block text-light p-3"><i class="icon ion-md-copy mr-2 lead"></i>Categoria</a>

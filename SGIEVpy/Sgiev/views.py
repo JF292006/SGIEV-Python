@@ -365,10 +365,11 @@ def editar_categoria(request, id):
 
 
 def eliminar_categoria(request, id):
-    categoria = Categoria.objects.get(id=id)
-    categoria.delete()
+    categoria = get_object_or_404(Categoria, id=id)
+    categoria.activo = 0
+    categoria.save()
+    Producto.objects.filter(categoria_idcategoria=categoria).update(activo=0)
     return redirect('list_categoria')
-
 #PRODUCTOS
 
 

@@ -64,10 +64,32 @@ class MensajeriaForm(forms.ModelForm):
     """
     Formulario para gestionar empresas de mensajería
     """
+
+    COBERTURA_CHOICES = [
+        ('NACIONAL', 'Nacional'),
+        ('BOGOTA', 'Bogotá'),
+        ('REGIONAL', 'Regional'),
+    ]
+
+    cobertura = forms.ChoiceField(
+        choices=COBERTURA_CHOICES,
+        widget=forms.Select(attrs={
+            'class': 'form-control',
+            'required': 'required'
+        }),
+        label='Cobertura'
+    )
+
     class Meta:
         model = Mensajeria
-        fields = ['nombre_mensajeria', 'tel_mensajeria', 'direccion_mensajeria', 'cobertura', 'activo']
-        
+        fields = [
+            'nombre_mensajeria',
+            'tel_mensajeria',
+            'direccion_mensajeria',
+            'cobertura',
+            'activo'
+        ]
+
         widgets = {
             'nombre_mensajeria': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -84,17 +106,12 @@ class MensajeriaForm(forms.ModelForm):
                 'placeholder': 'Dirección de la empresa',
                 'required': 'required'
             }),
-            'cobertura': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Ej: Nacional, Bogotá, Regional',
-                'required': 'required'
-            }),
             'activo': forms.Select(attrs={
                 'class': 'form-control',
                 'required': 'required'
             }, choices=[(1, 'Activo'), (0, 'Inactivo')])
         }
-        
+
         labels = {
             'nombre_mensajeria': 'Nombre de la Empresa',
             'tel_mensajeria': 'Teléfono',
@@ -102,6 +119,7 @@ class MensajeriaForm(forms.ModelForm):
             'cobertura': 'Cobertura',
             'activo': 'Estado'
         }
+
 
 
 # ===== FORMULARIOS DE ENVÍOS =====

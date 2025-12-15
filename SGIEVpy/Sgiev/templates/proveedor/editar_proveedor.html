@@ -90,14 +90,12 @@
                         </div>
 
                         <!-- Estado -->
-                        <h6 class="border-bottom pb-2 mb-3 mt-4">Estado</h6>
-                        <div class="form-group">
-                            <label for="activo">Proveedor activo *</label>
-                            <select id="activo" name="activo" class="form-control">
-                                <option value="True" {% if proveedor.activo %}selected{% endif %}>Sí</option>
-                                <option value="False" {% if not proveedor.activo %}selected{% endif %}>No</option>
-                            </select>
-                        </div>
+                        <label for="activo">Estado</label>
+<select name="activo" id="activo" class="form-control">
+  <option value="1" {% if proveedor.activo == 1 %}selected{% endif %}>Activo</option>
+  <option value="0" {% if proveedor.activo == 0 %}selected{% endif %}>Inactivo</option>
+</select>
+
 
                         <!-- Botones -->
                         <div class="form-group mt-4">

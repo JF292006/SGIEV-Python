@@ -1725,15 +1725,28 @@ def recibir_compra_pendiente(request, compra_id):
 
 @login_required
 def listar_proveedores(request):
-    usuario = request.user 
+    search = request.GET.get('search', '')
 
     proveedores = Proveedor.objects.all()
-    es_admin = usuario.tipo_usu == 'administrador'  
-    return render(request, 'proveedor/listar_prov.html', {
+
+
+    if search:
+        proveedores = proveedores.filter(
+            Q(nombre_proveedor__icontains=search)
+        )
+
+
+    usuario = request.user
+    es_admin = usuario.tipo_usu == 'administrador'
+
+    context = {
         'proveedores': proveedores,
+        'search': search,
         'usuario': usuario,
-        'es_admin': es_admin
-    })
+        'es_admin': es_admin,
+    }
+
+    return render(request, 'proveedor/listar_prov.html', context)
 
 
 @login_required

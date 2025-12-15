@@ -51,6 +51,23 @@
                     </button>
                 </div>
             </div>
+            <br>
+            <form method="get" class="form-inline">
+                <input type="text" name="search" 
+                       class="form-control mr-2" 
+                       placeholder="Buscar por nombre" 
+                       value="{{ search }}"
+                       style="width: 300px;">
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="icon ion-md-search"></i> Buscar
+                </button>
+
+                {% if search %}
+                <a href="{% url 'listar_proveedores' %}" class="btn btn-outline-secondary ml-2">
+                    <i class="icon ion-md-close"></i> Limpiar
+                </a>
+                {% endif %}
+            </form>
         </div>
 </div>
     </div>
